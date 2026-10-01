@@ -1,0 +1,6 @@
+{
+  "name": "Conclave Interiors",
+  "description": "Luxury modern interior architecture and design studio featuring editorial layouts, split-screen hero transitions, portfolio CMS, feedback moderation, and enquiry management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
