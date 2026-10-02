@@ -1,9 +1,47 @@
 import { Request, Response, NextFunction } from 'express';
-import { adminAuth } from '../lib/firebase-admin.ts';
-import { DecodedIdToken } from 'firebase-admin/auth';
+import { verifySessionToken } from '../db/service.ts';
+
+export interface AuthUser {
+  id: number;
+  uid: string;
+  email: string;
+  displayName: string | null;
+  role: string;
+}
 
 export interface AuthRequest extends Request {
-  user?: DecodedIdToken & { role?: string };
+  user?: AuthUser;
+}
+
+/**
+ * Extracts session token from HTTP-only cookie, Authorization header, or X-Session-Token header
+ */
+export function extractSessionToken(req: Request): string | null {
+  // 1. Primary: HTTP-only secure cookie
+  if ((req as any).cookies?.conclave_session) {
+    return (req as any).cookies.conclave_session;
+  }
+  // Cookie fallback parsing from cookie header if cookie-parser middleware not mounted yet
+  if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)conclave_session=([^;]+)/);
+    if (match) {
+      return decodeURIComponent(match[1]);
+    }
+  }
+
+  // 2. Secondary fallback: Bearer token header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split('Bearer ')[1]?.trim() || null;
+  }
+
+  // 3. Tertiary fallback: X-Session-Token header
+  const customHeader = req.headers['x-session-token'];
+  if (typeof customHeader === 'string' && customHeader.trim()) {
+    return customHeader.trim();
+  }
+
+  return null;
 }
 
 /**
@@ -29,10 +67,10 @@ export function isLocalhostRequest(req: Request): boolean {
 }
 
 /**
- * Single Authorized Administrator Verification Middleware
+ * Single Authorized Administrator Verification Middleware (PostgreSQL Session Auth)
  * 
  * Strict Server-Side Security:
- * - Verifies Google Firebase ID token cryptographically
+ * - Verifies session token against PostgreSQL `sessions` table
  * - Validates against the single designated administrator email
  * - Enforces localhost origin requirement when STRICT_LOCAL_ADMIN is configured
  * - Eliminates hardcoded passwords, session tokens, or demo bypasses
@@ -49,22 +87,45 @@ export const requireAuth = async (
     });
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      error: 'Unauthorized: Authentication token is required.',
-    });
+  // CSRF validation for state-changing requests when authenticated via cookie
+  const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method);
+  if (isStateChanging) {
+    const origin = req.headers.origin;
+    const adminClientHeader = req.headers['x-admin-client'];
+    const requestedWith = req.headers['x-requested-with'];
+    const csrfTokenHeader = req.headers['x-csrf-token'];
+
+    // Require either a verified custom client header or matching origin
+    const hasCustomHeader = Boolean(adminClientHeader || requestedWith || csrfTokenHeader);
+    const hasTrustedOrigin =
+      !origin ||
+      origin === process.env.APP_URL ||
+      origin.startsWith('http://localhost:') ||
+      origin.startsWith('http://127.0.0.1:');
+
+    if (!hasCustomHeader && !hasTrustedOrigin) {
+      return res.status(403).json({
+        error: 'Forbidden: Cross-site request forgery check failed.',
+      });
+    }
   }
 
-  const token = authHeader.split('Bearer ')[1]?.trim();
+  const token = extractSessionToken(req);
   if (!token) {
     return res.status(401).json({
-      error: 'Unauthorized: Authentication token is empty.',
+      error: 'Unauthorized: Authentication session required. Please sign in.',
     });
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
+    const verified = await verifySessionToken(token);
+    if (!verified || !verified.user) {
+      return res.status(401).json({
+        error: 'Unauthorized: Session is invalid or has expired. Please sign in again.',
+      });
+    }
+
+    const { user } = verified;
 
     // Designated single administrator email check
     const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
@@ -75,25 +136,28 @@ export const requireAuth = async (
       });
     }
 
-    const userEmail = (decodedToken.email || '').toLowerCase();
+    const userEmail = (user.email || '').toLowerCase();
 
-    if (userEmail !== authorizedEmail) {
-      console.warn(`Unauthorized login attempt by non-admin email: ${userEmail}`);
+    if (userEmail !== authorizedEmail || user.role !== 'admin') {
+      console.warn(`Unauthorized access attempt by non-admin: ${userEmail}`);
       return res.status(403).json({
         error: `Forbidden: Account ${userEmail} is not the authorized administrator for Conclave Interiors Atelier CMS.`,
       });
     }
 
     req.user = {
-      ...decodedToken,
-      role: 'admin',
+      id: user.id,
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role,
     };
 
     next();
   } catch (error: any) {
-    console.error('Error verifying Firebase ID token server-side:', error);
-    return res.status(401).json({
-      error: 'Unauthorized: Authentication token is invalid or expired. Please sign in again.',
+    console.error('Error verifying session server-side:', error);
+    return res.status(500).json({
+      error: 'Authentication verification encountered a server error.',
     });
   }
 };
@@ -109,20 +173,18 @@ export async function isAuthenticatedAdmin(req: Request): Promise<boolean> {
     return false;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return false;
-  }
-
-  const token = authHeader.split('Bearer ')[1]?.trim();
+  const token = extractSessionToken(req);
   if (!token) {
     return false;
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const userEmail = (decodedToken.email || '').toLowerCase();
-    return Boolean(userEmail && userEmail === authorizedEmail);
+    const verified = await verifySessionToken(token);
+    if (!verified || !verified.user) {
+      return false;
+    }
+    const userEmail = (verified.user.email || '').toLowerCase();
+    return Boolean(userEmail && userEmail === authorizedEmail && verified.user.role === 'admin');
   } catch {
     return false;
   }

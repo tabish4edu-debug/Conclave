@@ -1,15 +1,24 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
-// Users table (Firebase Auth integration)
+// Users table (PostgreSQL Admin Auth)
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID
+  uid: text('uid').notNull().unique(), // Retained for migration and identifier compatibility
   email: text('email').notNull(),
   displayName: text('display_name'),
   photoUrl: text('photo_url'),
+  passwordHash: text('password_hash'),
   role: text('role').notNull().default('admin'), // 'admin' | 'staff' | 'client'
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Dedicated Sessions table for server-side HTTP-only cookie authentication
+export const sessions = pgTable('sessions', {
+  id: text('id').primaryKey(), // SHA-256 hash of the cryptographically random session token
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
 });
 
 // Architectural Portfolio Projects

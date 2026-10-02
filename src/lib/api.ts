@@ -13,21 +13,21 @@ import {
   PublicationStatus,
 } from '../types.ts';
 
-// Token storage in memory & session fallback
+// In-memory token fallback if needed, never stored in browser storage
 let inMemoryAuthToken: string | null = null;
 
 export function setApiAuthToken(token: string | null) {
   inMemoryAuthToken = token;
-  if (token) {
-    sessionStorage.setItem('conclave_api_token', token);
-  } else {
-    sessionStorage.removeItem('conclave_api_token');
-  }
 }
 
 export function getApiAuthToken(): string | null {
-  if (inMemoryAuthToken) return inMemoryAuthToken;
-  return sessionStorage.getItem('conclave_api_token');
+  return inMemoryAuthToken;
+}
+
+function getCsrfTokenFromCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)conclave_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -36,11 +36,24 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
+
+  headers.set('X-Requested-With', 'XMLHttpRequest');
+
+  const csrfToken = getCsrfTokenFromCookie();
+  if (csrfToken && !headers.has('X-CSRF-Token')) {
+    headers.set('X-CSRF-Token', csrfToken);
+  }
+
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers,
+  });
+
   if (!response.ok) {
     let errorMsg = `Request to ${url} failed with status ${response.status}`;
     try {
@@ -56,6 +69,29 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  // PostgreSQL Admin Session Authentication
+  async login(email: string, password: string): Promise<{ authenticated: boolean; user: any; csrfToken?: string }> {
+    return request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  async logout(): Promise<{ success: boolean; message: string }> {
+    return request('/api/auth/logout', { method: 'POST' });
+  },
+
+  async getSession(): Promise<{ authenticated: boolean; user: any; csrfToken?: string }> {
+    return request('/api/auth/session');
+  },
+
+  async changePassword(data: { currentPassword: string; newPassword: string; confirmPassword: string }): Promise<{ success: boolean; message: string }> {
+    return request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
   // Media Upload (Photos & Videos) to Persistent Storage
   async uploadMedia(file: File, altText?: string): Promise<{ url: string; filename: string; size: number; id: string; mimeType?: string; isVideo?: boolean }> {
     const formData = new FormData();

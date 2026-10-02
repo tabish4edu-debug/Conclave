@@ -1,9 +1,18 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+import cookieParser from 'cookie-parser';
+import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
-import { requireAuth, AuthRequest, isLocalhostRequest, isAuthenticatedAdmin } from './src/middleware/auth.ts';
+import {
+  requireAuth,
+  AuthRequest,
+  isLocalhostRequest,
+  isAuthenticatedAdmin,
+  extractSessionToken,
+} from './src/middleware/auth.ts';
 import { storageService } from './src/lib/storage.ts';
 import { sanitizeHtml, sanitizeText } from './src/lib/sanitize.ts';
 import {
@@ -50,6 +59,14 @@ import {
   getPublicationHistory,
   getOrCreateUser,
   seedInitialDatabaseIfEmpty,
+  initAdminAccount,
+  findUserByEmail,
+  findUserById,
+  createSession,
+  verifySessionToken,
+  deleteSession,
+  deleteUserSessions,
+  updateUserPassword,
 } from './src/db/service.ts';
 
 // In-memory sliding window IP rate limiter for public submission endpoints
@@ -108,6 +125,62 @@ function createRateLimiter(options: {
   };
 }
 
+// Dedicated login brute-force limiter (tracks IP and email, max 5 failed attempts per 15 minutes)
+interface LoginAttemptRecord {
+  attempts: number;
+  resetTime: number;
+}
+
+const loginIpAttempts = new Map<string, LoginAttemptRecord>();
+const loginEmailAttempts = new Map<string, LoginAttemptRecord>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, r] of loginIpAttempts.entries()) {
+    if (now > r.resetTime) loginIpAttempts.delete(ip);
+  }
+  for (const [email, r] of loginEmailAttempts.entries()) {
+    if (now > r.resetTime) loginEmailAttempts.delete(email);
+  }
+}, 5 * 60 * 1000).unref();
+
+function checkLoginBruteForce(clientIp: string, normalizedEmail: string): { blocked: boolean; retryAfterSeconds?: number } {
+  const now = Date.now();
+  const ipRec = loginIpAttempts.get(clientIp);
+  if (ipRec && now <= ipRec.resetTime && ipRec.attempts >= 5) {
+    return { blocked: true, retryAfterSeconds: Math.ceil((ipRec.resetTime - now) / 1000) };
+  }
+  const emailRec = loginEmailAttempts.get(normalizedEmail);
+  if (emailRec && now <= emailRec.resetTime && emailRec.attempts >= 5) {
+    return { blocked: true, retryAfterSeconds: Math.ceil((emailRec.resetTime - now) / 1000) };
+  }
+  return { blocked: false };
+}
+
+function recordFailedLogin(clientIp: string, normalizedEmail: string) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+
+  const ipRec = loginIpAttempts.get(clientIp);
+  if (!ipRec || now > ipRec.resetTime) {
+    loginIpAttempts.set(clientIp, { attempts: 1, resetTime: now + windowMs });
+  } else {
+    ipRec.attempts += 1;
+  }
+
+  const emailRec = loginEmailAttempts.get(normalizedEmail);
+  if (!emailRec || now > emailRec.resetTime) {
+    loginEmailAttempts.set(normalizedEmail, { attempts: 1, resetTime: now + windowMs });
+  } else {
+    emailRec.attempts += 1;
+  }
+}
+
+function resetFailedLogin(clientIp: string, normalizedEmail: string) {
+  loginIpAttempts.delete(clientIp);
+  loginEmailAttempts.delete(normalizedEmail);
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -141,6 +214,7 @@ async function startServer() {
     },
   });
 
+  app.use(cookieParser(process.env.SESSION_SECRET || 'conclave_atelier_session_secret'));
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -171,7 +245,7 @@ async function startServer() {
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader(
         'Access-Control-Allow-Headers',
-        'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-Client'
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-Client, X-Session-Token, X-CSRF-Token'
       );
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     }
@@ -186,13 +260,16 @@ async function startServer() {
     res.json({
       status: 'ok',
       service: 'CONCLAVE INTERIORS Atelier CMS API',
-      database: 'Cloud SQL PostgreSQL',
+      database: 'PostgreSQL',
       mediaStorage: 'Persistent Online Storage (Database Blobs / Abstracted)',
       timestamp: new Date().toISOString(),
     });
   });
 
-  // Seed DB if empty
+  // Seed DB if empty & Initialize Administrator Account
+  initAdminAccount().catch((err) => {
+    console.error('Administrator account initialization error:', err);
+  });
   seedInitialDatabaseIfEmpty().catch((err) => {
     console.error('Initial DB seeding background error:', err);
   });
@@ -315,25 +392,211 @@ async function startServer() {
   });
 
   // -------------------------------------------------------------
-  // AUTHENTICATION & USER SYNCHRONIZATION
+  // POSTGRESQL ADMIN SESSION AUTHENTICATION
   // -------------------------------------------------------------
-  app.post('/api/auth/verify', requireAuth, async (req: AuthRequest, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const sessionCookieOptions: express.CookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  };
+  const csrfCookieOptions: express.CookieOptions = {
+    httpOnly: false,
+    secure: isProduction,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  };
+
+  // Administrator Login Endpoint (Protected against brute-force)
+  app.post('/api/auth/login', async (req, res) => {
     try {
-      const user = req.user!;
-      const dbUser = await getOrCreateUser(
-        user.uid,
-        user.email || process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com',
-        user.name || 'Studio Principal',
-        user.picture || undefined
-      );
-      res.json({
+      const forwarded = req.headers['x-forwarded-for'];
+      const clientIp =
+        (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined) ||
+        req.ip ||
+        req.socket.remoteAddress ||
+        'unknown-client';
+
+      const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+      const password = typeof req.body.password === 'string' ? req.body.password : '';
+
+      // Check brute-force limits
+      const bruteCheck = checkLoginBruteForce(clientIp, email);
+      if (bruteCheck.blocked) {
+        res.setHeader('Retry-After', String(bruteCheck.retryAfterSeconds || 900));
+        return res.status(429).json({
+          error: 'Too many failed login attempts. Please wait 15 minutes before trying again.',
+          retryAfterSeconds: bruteCheck.retryAfterSeconds,
+        });
+      }
+
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+      }
+
+      // Check configured administrator email
+      const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+      if (!authorizedEmail) {
+        console.error('Server configuration error: ADMIN_EMAIL is not set in environment.');
+        return res.status(500).json({ error: 'Server authentication configuration error.' });
+      }
+
+      // Constant-time-like generic failure if email does not match admin email
+      if (email !== authorizedEmail) {
+        recordFailedLogin(clientIp, email);
+        return res.status(401).json({ error: 'Invalid email or password.' });
+      }
+
+      // Locate administrator in PostgreSQL
+      const user = await findUserByEmail(email);
+      if (!user || user.role !== 'admin' || !user.passwordHash) {
+        recordFailedLogin(clientIp, email);
+        return res.status(401).json({ error: 'Invalid email or password.' });
+      }
+
+      // Verify bcrypt password hash
+      const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+      if (!passwordMatch) {
+        recordFailedLogin(clientIp, email);
+        return res.status(401).json({ error: 'Invalid email or password.' });
+      }
+
+      // Successful authentication — reset rate-limit tracking
+      resetFailedLogin(clientIp, email);
+
+      // Create cryptographically secure session
+      const { rawToken } = await createSession(user.id, 7);
+      const csrfToken = crypto.randomBytes(16).toString('hex');
+
+      // Set HTTP-only session cookie and CSRF token cookie
+      res.cookie('conclave_session', rawToken, sessionCookieOptions);
+      res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
+
+      // Return safe user information only (never password_hash or session secrets)
+      return res.json({
         authenticated: true,
-        user: dbUser,
-        isLocal: isLocalhostRequest(req),
+        user: {
+          id: user.id,
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role,
+        },
+        csrfToken,
       });
     } catch (error: any) {
-      console.error('Auth verification error:', error);
-      res.status(500).json({ error: error.message || 'Authentication verification failed' });
+      console.error('Login processing error:', error);
+      return res.status(500).json({ error: 'An error occurred during authentication.' });
+    }
+  });
+
+  // Administrator Logout Endpoint
+  app.post('/api/auth/logout', async (req, res) => {
+    try {
+      const token = extractSessionToken(req);
+      if (token) {
+        await deleteSession(token);
+      }
+      res.clearCookie('conclave_session', { path: '/' });
+      res.clearCookie('conclave_csrf', { path: '/' });
+      return res.json({ success: true, message: 'Logged out successfully.' });
+    } catch (error: any) {
+      console.error('Logout error:', error);
+      return res.status(500).json({ error: 'Failed to complete logout.' });
+    }
+  });
+
+  // Current Session Endpoint (Safe metadata only)
+  app.get('/api/auth/session', async (req, res) => {
+    try {
+      const token = extractSessionToken(req);
+      if (!token) {
+        return res.json({ authenticated: false, user: null });
+      }
+
+      const verified = await verifySessionToken(token);
+      if (!verified || !verified.user) {
+        res.clearCookie('conclave_session', { path: '/' });
+        return res.json({ authenticated: false, user: null });
+      }
+
+      const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+      if (!authorizedEmail || verified.user.email.toLowerCase() !== authorizedEmail || verified.user.role !== 'admin') {
+        res.clearCookie('conclave_session', { path: '/' });
+        return res.json({ authenticated: false, user: null });
+      }
+
+      const csrfToken = req.cookies?.conclave_csrf || crypto.randomBytes(16).toString('hex');
+      res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
+
+      return res.json({
+        authenticated: true,
+        user: {
+          id: verified.user.id,
+          uid: verified.user.uid,
+          email: verified.user.email,
+          displayName: verified.user.displayName,
+          role: verified.user.role,
+        },
+        csrfToken,
+      });
+    } catch (error: any) {
+      console.error('Session retrieval error:', error);
+      return res.json({ authenticated: false, user: null });
+    }
+  });
+
+  // Backward-compatible auth verification check
+  app.post('/api/auth/verify', requireAuth, async (req: AuthRequest, res) => {
+    return res.json({
+      authenticated: true,
+      user: req.user,
+      isLocal: isLocalhostRequest(req),
+    });
+  });
+
+  // Secure Password Change Endpoint
+  app.post('/api/auth/change-password', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { currentPassword, newPassword, confirmPassword } = req.body;
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ error: 'Current password, new password, and confirmation are required.' });
+      }
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'New password and confirmation do not match.' });
+      }
+      if (typeof newPassword !== 'string' || newPassword.length < 8) {
+        return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+      }
+
+      const user = await findUserById(req.user!.id);
+      if (!user || !user.passwordHash) {
+        return res.status(400).json({ error: 'Administrator account not found.' });
+      }
+
+      const currentMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!currentMatch) {
+        return res.status(400).json({ error: 'Current password is incorrect.' });
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 12);
+      await updateUserPassword(user.id, newHash);
+
+      // Invalidate existing sessions and generate fresh session
+      await deleteUserSessions(user.id);
+      const { rawToken } = await createSession(user.id, 7);
+      const csrfToken = crypto.randomBytes(16).toString('hex');
+
+      res.cookie('conclave_session', rawToken, sessionCookieOptions);
+      res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
+
+      return res.json({ success: true, message: 'Administrator password changed successfully.' });
+    } catch (error: any) {
+      console.error('Password change error:', error);
+      return res.status(500).json({ error: 'Failed to change administrator password.' });
     }
   });
 
@@ -354,7 +617,7 @@ async function startServer() {
       const user = req.user!;
       const note = req.body.notes ? sanitizeText(req.body.notes) : undefined;
       const result = await publishBatch(
-        user.name || 'Studio Administrator',
+        user.displayName || 'Studio Administrator',
         user.email || process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com',
         note
       );

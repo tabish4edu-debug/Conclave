@@ -11,10 +11,12 @@ import {
   aboutStudio,
   mediaUploads,
   users,
+  sessions,
   publicationHistory,
 } from './schema.ts';
 import { eq, desc, asc, and } from 'drizzle-orm';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import {
   INITIAL_PROJECTS,
   INITIAL_HERO_SLIDES,
@@ -27,6 +29,109 @@ import {
   INITIAL_ABOUT,
 } from '../data/initialData.ts';
 
+// SHA-256 session token hashing helper
+function hashSessionToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export async function findUserByEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  const allUsers = await db.select().from(users);
+  return allUsers.find((u) => u.email.trim().toLowerCase() === normalized) || null;
+}
+
+export async function findUserById(id: number) {
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0] || null;
+}
+
+export async function initAdminAccount() {
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (!adminEmail) {
+    console.warn('[AUTH] ADMIN_EMAIL is not set in environment. Admin authentication will fail closed.');
+    return;
+  }
+
+  const existing = await findUserByEmail(adminEmail);
+  const initialPassword = process.env.ADMIN_INITIAL_PASSWORD?.trim();
+
+  if (existing) {
+    // If the existing admin record has no password and ADMIN_INITIAL_PASSWORD is provided, set it
+    if (!existing.passwordHash && initialPassword) {
+      const passwordHash = await bcrypt.hash(initialPassword, 12);
+      await db
+        .update(users)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(users.id, existing.id));
+      console.log('[AUTH] Administrator initial password configured securely.');
+    }
+  } else {
+    // Create new admin user record
+    const passwordHash = initialPassword ? await bcrypt.hash(initialPassword, 12) : null;
+    const uid = `admin-${crypto.randomBytes(8).toString('hex')}`;
+    await db.insert(users).values({
+      uid,
+      email: adminEmail,
+      displayName: 'Studio Principal',
+      role: 'admin',
+      passwordHash,
+    });
+    console.log('[AUTH] Administrator account registered in PostgreSQL.');
+  }
+}
+
+export async function createSession(userId: number, durationDays = 7) {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashSessionToken(rawToken);
+  const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
+
+  await db.insert(sessions).values({
+    id: tokenHash,
+    userId,
+    createdAt: new Date(),
+    expiresAt,
+  });
+
+  return { rawToken, expiresAt };
+}
+
+export async function verifySessionToken(rawToken: string) {
+  if (!rawToken || typeof rawToken !== 'string') return null;
+  const tokenHash = hashSessionToken(rawToken);
+
+  const found = await db.select().from(sessions).where(eq(sessions.id, tokenHash)).limit(1);
+  if (found.length === 0) return null;
+
+  const session = found[0];
+  if (new Date() > new Date(session.expiresAt)) {
+    // Expired - clean it up
+    await db.delete(sessions).where(eq(sessions.id, tokenHash));
+    return null;
+  }
+
+  const user = await findUserById(session.userId);
+  if (!user) return null;
+
+  return { session, user };
+}
+
+export async function deleteSession(rawToken: string) {
+  if (!rawToken) return;
+  const tokenHash = hashSessionToken(rawToken);
+  await db.delete(sessions).where(eq(sessions.id, tokenHash));
+}
+
+export async function deleteUserSessions(userId: number) {
+  await db.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+export async function updateUserPassword(userId: number, newPasswordHash: string) {
+  await db
+    .update(users)
+    .set({ passwordHash: newPasswordHash, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
 // User helper
 export async function getOrCreateUser(uid: string, email: string, displayName?: string, photoUrl?: string) {
   try {
@@ -34,7 +139,6 @@ export async function getOrCreateUser(uid: string, email: string, displayName?: 
     if (existing.length > 0) {
       return existing[0];
     }
-    const isOwner = email.toLowerCase().includes('mumtazara593') || email.toLowerCase().includes('conclave');
     const result = await db
       .insert(users)
       .values({
@@ -42,7 +146,7 @@ export async function getOrCreateUser(uid: string, email: string, displayName?: 
         email,
         displayName: displayName || null,
         photoUrl: photoUrl || null,
-        role: isOwner ? 'admin' : 'admin',
+        role: 'admin',
       })
       .returning();
     return result[0];

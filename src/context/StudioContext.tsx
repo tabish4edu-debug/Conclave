@@ -24,9 +24,7 @@ import {
   INITIAL_FAQS,
   INITIAL_ABOUT,
 } from '../data/initialData.ts';
-import { api, setApiAuthToken, getApiAuthToken } from '../lib/api.ts';
-import { auth, googleAuthProvider } from '../lib/firebase.ts';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { api } from '../lib/api.ts';
 
 interface StudioContextType {
   settings: SiteSettings;
@@ -51,13 +49,13 @@ interface StudioContextType {
   isFeedbackModalOpen: boolean;
   setIsFeedbackModalOpen: (open: boolean) => void;
 
-  // Admin Auth & User
+  // Admin Auth & User (PostgreSQL Session Auth)
   isAdminLoggedIn: boolean;
   currentUser: { email?: string | null; displayName?: string | null; photoURL?: string | null; role?: string } | null;
   authLoading: boolean;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  loginAdmin: (password: string) => boolean;
-  logoutAdmin: () => void;
+  loginAdmin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  logoutAdmin: () => Promise<void>;
+  changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => Promise<{ success: boolean; message?: string; error?: string }>;
 
   // Preview Mode
   isPreviewMode: boolean;
@@ -272,43 +270,36 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => window.removeEventListener('hashchange', handleHash);
   }, [activePage]);
 
-  // Monitor Firebase Auth State
+  // Check Active PostgreSQL Session on Mount
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
-      if (user) {
-        try {
-          const token = await user.getIdToken();
-          setApiAuthToken(token);
-          const verifyRes = await api.verifyAuth();
-          if (verifyRes.authenticated) {
-            setIsAdminLoggedIn(true);
-            localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
-            setCurrentUser({
-              email: user.email,
-              displayName: user.displayName || user.email?.split('@')[0],
-              photoURL: user.photoURL,
-              role: 'admin',
-            });
-          }
-        } catch (err: any) {
-          console.error('Firebase Auth token verification failed:', err);
-          setIsAdminLoggedIn(false);
-          setCurrentUser(null);
-          localStorage.removeItem(STORAGE_KEYS.AUTH);
-          setApiAuthToken(null);
-        }
-      } else {
-        const storedToken = getApiAuthToken();
-        if (!storedToken) {
+    async function checkSession() {
+      setAuthLoading(true);
+      try {
+        const sessionRes = await api.getSession();
+        if (sessionRes.authenticated && sessionRes.user) {
+          setIsAdminLoggedIn(true);
+          localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
+          setCurrentUser({
+            email: sessionRes.user.email,
+            displayName: sessionRes.user.displayName || sessionRes.user.email?.split('@')[0],
+            role: sessionRes.user.role || 'admin',
+          });
+        } else {
           setIsAdminLoggedIn(false);
           setCurrentUser(null);
           localStorage.removeItem(STORAGE_KEYS.AUTH);
         }
+      } catch (err) {
+        console.warn('Session verification warning:', err);
+        setIsAdminLoggedIn(false);
+        setCurrentUser(null);
+        localStorage.removeItem(STORAGE_KEYS.AUTH);
+      } finally {
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
-    });
+    }
 
-    return () => unsubscribe();
+    checkSession();
   }, []);
 
   // Fetch live data from PostgreSQL API
@@ -461,58 +452,54 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // -------------------------------------------------------------
-  // AUTHENTICATION METHODS (Hardened Google OAuth Only)
+  // AUTHENTICATION METHODS (PostgreSQL Session Auth)
   // -------------------------------------------------------------
-  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+  const loginAdmin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setAuthLoading(true);
-      const userCredential = await signInWithPopup(auth, googleAuthProvider);
-      const token = await userCredential.user.getIdToken();
-      setApiAuthToken(token);
-
-      // Verify with backend against ADMIN_EMAIL
-      const verifyRes = await api.verifyAuth();
-      if (!verifyRes.authenticated) {
-        throw new Error('Access denied: Email is not the designated Studio Administrator.');
+      const res = await api.login(email, password);
+      if (res.authenticated && res.user) {
+        setIsAdminLoggedIn(true);
+        localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
+        setCurrentUser({
+          email: res.user.email,
+          displayName: res.user.displayName || res.user.email?.split('@')[0],
+          role: res.user.role || 'admin',
+        });
+        await refreshFromDatabase();
+        return { success: true };
       }
-
-      setIsAdminLoggedIn(true);
-      localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
-      setCurrentUser({
-        email: userCredential.user.email,
-        displayName: userCredential.user.displayName,
-        photoURL: userCredential.user.photoURL,
-        role: 'admin',
-      });
-      await refreshFromDatabase();
-      return { success: true };
+      return { success: false, error: 'Invalid email or password.' };
     } catch (err: any) {
-      console.error('Google Sign-In failed:', err);
-      // Clean up failed login
-      signOut(auth).catch(() => null);
-      setApiAuthToken(null);
+      console.error('Administrator authentication failed:', err);
       setIsAdminLoggedIn(false);
       setCurrentUser(null);
       localStorage.removeItem(STORAGE_KEYS.AUTH);
-      return { success: false, error: err.message || 'Access denied: Only authorized administrator can access this CMS.' };
+      return { success: false, error: err.message || 'Invalid email or password.' };
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Retain legacy method signature for compatibility but deny unauthenticated bypass
-  const loginAdmin = (_password: string): boolean => {
-    console.warn('Direct password login is disabled for security. Use authorized Google Sign-In.');
-    return false;
+  const logoutAdmin = async () => {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.warn('Logout error:', err);
+    } finally {
+      setIsAdminLoggedIn(false);
+      setCurrentUser(null);
+      localStorage.removeItem(STORAGE_KEYS.AUTH);
+    }
   };
 
-  const logoutAdmin = () => {
-    signOut(auth).catch(() => null);
-    setApiAuthToken(null);
-    setIsAdminLoggedIn(false);
-    setCurrentUser(null);
-    localStorage.removeItem(STORAGE_KEYS.AUTH);
-    sessionStorage.removeItem('conclave_api_token');
+  const changePassword = async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
+    try {
+      const res = await api.changePassword(data);
+      return { success: true, message: res.message };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to update administrator password.' };
+    }
   };
 
   // -------------------------------------------------------------
@@ -961,9 +948,9 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isAdminLoggedIn,
         currentUser,
         authLoading,
-        loginWithGoogle,
         loginAdmin,
         logoutAdmin,
+        changePassword,
         isPreviewMode,
         togglePreviewMode,
         publicationStatus,

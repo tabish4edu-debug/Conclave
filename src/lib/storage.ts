@@ -35,7 +35,7 @@ export interface StorageProvider {
 /**
  * PostgreSQL Database Blob Storage Provider
  * 
- * Stores image binary data as base64 in the Cloud SQL PostgreSQL database.
+ * Stores image binary data as base64 in the PostgreSQL database.
  * This guarantees 100% persistent storage on Cloud Run containers without loss
  * across container recycles, scale-to-zero events, or redeployments, with zero
  * dependency on ephemeral container filesystems.

@@ -53,8 +53,9 @@ export const AdminPanel: React.FC = () => {
     isAdminLoggedIn,
     currentUser,
     authLoading,
-    loginWithGoogle,
+    loginAdmin,
     logoutAdmin,
+    changePassword,
     isLoadingData,
     refreshFromDatabase,
     setActivePage,
@@ -122,8 +123,18 @@ export const AdminPanel: React.FC = () => {
     | 'database'
   >('dashboard');
 
-  // Login error state
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+
+  // Password change modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordChangeStatus, setPasswordChangeStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Publication Modal state
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -147,14 +158,50 @@ export const AdminPanel: React.FC = () => {
   const [mediaTabFilter, setMediaTabFilter] = useState<'all' | 'image' | 'video'>('all');
   const [newGalleryItem, setNewGalleryItem] = useState<{ url: string; alt: string; caption?: string }>({ url: '', alt: '', caption: '' });
 
-  // Handle Google Sign In
-  const handleGoogleSignIn = async () => {
+  // Handle Admin Password Login
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail.trim() || !loginPassword) {
+      setLoginError('Please enter both administrator email and password.');
+      return;
+    }
     setLoginError('');
-    try {
-      await loginWithGoogle();
-    } catch (err: any) {
-      console.error('Login error:', err);
-      setLoginError(err.message || 'Authentication failed. Please verify your Google account.');
+    const res = await loginAdmin(loginEmail.trim(), loginPassword);
+    if (!res.success) {
+      setLoginError(res.error || 'Invalid email or password.');
+    }
+  };
+
+  // Handle Password Change
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordChangeStatus({ success: false, message: 'All fields are required.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeStatus({ success: false, message: 'New password and confirmation do not match.' });
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordChangeStatus({ success: false, message: 'New password must be at least 8 characters long.' });
+      return;
+    }
+    setIsChangingPassword(true);
+    setPasswordChangeStatus(null);
+    const res = await changePassword({ currentPassword, newPassword, confirmPassword });
+    setIsChangingPassword(false);
+    if (res.success) {
+      setPasswordChangeStatus({ success: true, message: res.message || 'Password changed successfully!' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => {
+        setShowPasswordModal(false);
+        setPasswordChangeStatus(null);
+      }, 2000);
+    } else {
+      setPasswordChangeStatus({ success: false, message: res.error || 'Failed to change password.' });
     }
   };
 
@@ -219,25 +266,53 @@ export const AdminPanel: React.FC = () => {
             </div>
           )}
 
-          <div className="pt-2">
+          <form onSubmit={handlePasswordLogin} className="space-y-4 pt-2">
+            <div>
+              <label className="block text-[10px] uppercase font-mono tracking-wider text-[#B08D57] mb-1.5">
+                Administrator Email
+              </label>
+              <input
+                type="email"
+                required
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="admin@conclaveinteriors.com"
+                className="w-full bg-[#202124] border border-[#3A3C3E] px-3.5 py-2.5 text-xs text-[#F2EEE7] focus:outline-none focus:border-[#B08D57] transition-colors font-mono placeholder:text-[#D8CFC1]/30"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-mono tracking-wider text-[#B08D57] mb-1.5">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="w-full bg-[#202124] border border-[#3A3C3E] px-3.5 py-2.5 text-xs text-[#F2EEE7] focus:outline-none focus:border-[#B08D57] transition-colors font-mono"
+              />
+            </div>
+
             <button
-              onClick={handleGoogleSignIn}
+              type="submit"
               disabled={authLoading}
-              className="w-full py-3 bg-[#B08D57] hover:bg-[#9A7745] text-[#202124] text-xs font-semibold uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+              className="w-full py-3 bg-[#B08D57] hover:bg-[#9A7745] text-[#202124] text-xs font-semibold uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
             >
               {authLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Lock className="w-3.5 h-3.5" />
               )}
-              <span>Sign In with Authorized Google Account</span>
+              <span>Authenticate & Enter Atelier CMS</span>
             </button>
-          </div>
+          </form>
 
           {/* Database connection status badge */}
           <div className="pt-2 border-t border-[#3A3C3E] text-center flex items-center justify-center gap-2 text-[10px] font-mono text-[#D8CFC1]/60">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Cloud SQL PostgreSQL Online • Persistent Media Storage Ready</span>
+            <span>PostgreSQL Online • Persistent Media Storage Ready</span>
           </div>
 
           <div className="pt-1 text-center">
@@ -274,7 +349,7 @@ export const AdminPanel: React.FC = () => {
                   Studio Atelier & Storage
                 </span>
               </div>
-              <span className="w-2 h-2 rounded-full bg-emerald-400" title="Cloud SQL Online"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400" title="PostgreSQL Online"></span>
             </div>
 
             {/* Authenticated user badge */}
@@ -496,7 +571,7 @@ export const AdminPanel: React.FC = () => {
             >
               <div className="flex items-center gap-2.5">
                 <Database className="w-4 h-4" />
-                <span>Cloud SQL Architecture</span>
+                <span>PostgreSQL Architecture</span>
               </div>
             </button>
           </nav>
@@ -574,7 +649,7 @@ export const AdminPanel: React.FC = () => {
               onClick={refreshFromDatabase}
               disabled={isLoadingData}
               className="p-2.5 bg-[#202124] border border-[#3A3C3E] text-[#D8CFC1] hover:text-[#B08D57] text-xs transition-colors"
-              title="Refresh all records directly from Cloud SQL"
+              title="Refresh all records directly from PostgreSQL database"
             >
               <RefreshCw className={`w-4 h-4 ${isLoadingData ? 'animate-spin' : ''}`} />
             </button>
@@ -602,7 +677,7 @@ export const AdminPanel: React.FC = () => {
               <div>
                 <h2 className="font-serif-title text-3xl text-[#F2EEE7]">Atelier Overview</h2>
                 <p className="text-xs text-[#D8CFC1]/70">
-                  Real-time synchronization with Cloud SQL PostgreSQL & Base64 Blob Storage.
+                  Real-time synchronization with PostgreSQL database & Base64 Blob Storage.
                 </p>
               </div>
 
@@ -2698,10 +2773,10 @@ export const AdminPanel: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#3A3C3E]">
               <div>
                 <h2 className="font-serif-title text-3xl text-[#F2EEE7]">
-                  Cloud SQL PostgreSQL & Storage
+                  PostgreSQL & Storage
                 </h2>
                 <p className="text-xs text-[#D8CFC1]/70 mt-1">
-                  Active relational PostgreSQL database provisioned in region <strong>asia-southeast1</strong>.
+                  Active relational PostgreSQL database connected via <strong>DATABASE_URL</strong>.
                 </p>
               </div>
 
@@ -2711,7 +2786,7 @@ export const AdminPanel: React.FC = () => {
                 className="px-4 py-2 bg-[#B08D57] hover:bg-[#9A7745] text-[#202124] text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 self-start sm:self-auto"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoadingData ? 'animate-spin' : ''}`} />
-                <span>{isLoadingData ? 'Syncing...' : 'Sync Cloud SQL'}</span>
+                <span>{isLoadingData ? 'Syncing...' : 'Sync PostgreSQL'}</span>
               </button>
             </div>
 
@@ -2724,11 +2799,11 @@ export const AdminPanel: React.FC = () => {
                     Engine Status: ONLINE
                   </span>
                 </div>
-                <h4 className="font-serif-title text-xl text-[#F2EEE7]">Google Cloud SQL</h4>
+                <h4 className="font-serif-title text-xl text-[#F2EEE7]">PostgreSQL</h4>
                 <p className="text-xs text-[#D8CFC1]/70">
-                  Region: <span className="text-[#B08D57] font-mono">asia-southeast1</span>
+                  Connection: <span className="text-[#B08D57] font-mono">DATABASE_URL</span>
                   <br />
-                  Project: <span className="text-[#B08D57] font-mono">coherent-droplet-0ghtt</span>
+                  Engine: <span className="text-[#B08D57] font-mono">Relational SQL</span>
                 </p>
               </div>
 
