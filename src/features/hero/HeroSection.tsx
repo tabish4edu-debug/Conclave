@@ -24,8 +24,8 @@ export const HeroSection: React.FC = () => {
     headline: 'Beautiful Interiors For Modern Living',
     supportingText:
       'We create functional and aesthetic spaces that reflect your personality and lifestyle. From concept to completion, with quality, durability and timely execution.',
-    primaryCtaText: 'Explore Services',
-    primaryCtaLink: '#services',
+    primaryCtaText: 'Explore Sanctuary',
+    primaryCtaLink: '#noir-sanctuary',
     secondaryCtaText: 'Watch Our Video',
     secondaryCtaLink: '#about',
     imageUrl:
@@ -205,10 +205,10 @@ export const HeroSection: React.FC = () => {
               isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
             }`}>
               <button
-                onClick={() => handleCtaClick(currentSlide.primaryCtaLink === '#projects' ? '#services' : (currentSlide.primaryCtaLink || '#services'))}
+                onClick={() => handleCtaClick(currentSlide.primaryCtaLink === '#services' ? '#noir-sanctuary' : (currentSlide.primaryCtaLink || '#noir-sanctuary'))}
                 className="group inline-flex items-center gap-2.5 px-7 py-3.5 bg-[#202124] hover:bg-[#2B2D2F] text-[#F2EEE7] font-semibold text-xs rounded-full transition-all shadow-md active:scale-95 cursor-pointer"
               >
-                <span>{currentSlide.primaryCtaText === 'View Projects' ? 'Explore Services' : (currentSlide.primaryCtaText || 'Explore Services')}</span>
+                <span>{currentSlide.primaryCtaText === 'Explore Services' ? 'Explore Sanctuary' : (currentSlide.primaryCtaText || 'Explore Sanctuary')}</span>
                 <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition-transform text-[#B08D57]" />
               </button>
 

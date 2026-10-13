@@ -157,7 +157,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isQueryModalOpen, setIsQueryModalOpen] = useState<boolean>(false);
   const [queryInitialTab, setQueryInitialTab] = useState<'whatsapp' | 'call' | 'enquiry'>('enquiry');
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false);
-  const [isHeroPreloaded, setIsHeroPreloaded] = useState<boolean>(false);
+  const [isHeroPreloaded, setIsHeroPreloaded] = useState<boolean>(true);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 

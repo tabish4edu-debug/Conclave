@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStudio } from '../../context/StudioContext';
-import { MessageSquare, Phone, Send, X, ArrowUpRight } from 'lucide-react';
+import { MessageSquare, MessageCircle, Phone, Send, X } from 'lucide-react';
 
 export const FloatingQueryButton: React.FC = () => {
   const { settings, setIsQueryModalOpen, setQueryInitialTab } = useStudio();
@@ -109,25 +109,21 @@ export const FloatingQueryButton: React.FC = () => {
         </div>
       )}
 
-      {/* Main Trigger Button */}
+      {/* Main Trigger Button: Floating Chat Icon Button */}
       <button
         id="floating-query-btn"
         onClick={() => setIsExpanded(!isExpanded)}
-        aria-label="Open Studio Consultation Options – Let's Talk"
+        aria-label={isExpanded ? "Close consultation menu" : "Open studio chat & consultation"}
         aria-expanded={isExpanded}
-        className="relative flex items-center gap-2.5 px-5 py-3.5 bg-[#202124] hover:bg-[#2B2D2F] text-[#F2EEE7] border border-[#B08D57] shadow-2xl transition-all duration-300 active:scale-95 focus:outline-hidden focus:ring-2 focus:ring-[#B08D57] cursor-pointer"
+        className="group relative w-14 h-14 rounded-full bg-[#202124] hover:bg-[#2B2D2F] text-[#F2EEE7] border border-[#B08D57] shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 focus:outline-hidden focus:ring-2 focus:ring-[#B08D57] cursor-pointer"
       >
-        {/* Bronze accent dot */}
-        <span className="w-2 h-2 rounded-full bg-[#B08D57] animate-pulse" />
-
-        {/* Text */}
-        <span className="text-xs uppercase tracking-[0.2em] font-semibold text-[#F2EEE7]">
-          LET'S TALK
-        </span>
-
-        {/* Icon */}
-        <div className={`w-5 h-5 rounded-full bg-[#B08D57] text-[#202124] flex items-center justify-center transition-transform duration-300 ${isExpanded ? 'rotate-90' : 'group-hover:rotate-45'}`}>
-          {isExpanded ? <X className="w-3.5 h-3.5 stroke-[2.5]" /> : <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />}
+        {/* Chat / Close Icon with pulse effect */}
+        <div className="text-[#B08D57] group-hover:text-[#D8CFC1] transition-all duration-300">
+          {isExpanded ? (
+            <X className="w-6 h-6 stroke-[2.2] transition-transform duration-300 rotate-0 group-hover:rotate-90" />
+          ) : (
+            <MessageCircle className="w-6 h-6 stroke-[2] transition-all duration-300 group-hover:scale-110 animate-pulse drop-shadow-[0_0_8px_rgba(176,141,87,0.45)]" />
+          )}
         </div>
       </button>
     </div>

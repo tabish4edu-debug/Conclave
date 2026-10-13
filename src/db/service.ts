@@ -46,10 +46,9 @@ export async function findUserById(id: number) {
 }
 
 export async function initAdminAccount() {
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  if (!adminEmail) {
-    console.warn('[AUTH] ADMIN_EMAIL is not set in environment. Admin authentication will fail closed.');
-    return;
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com').trim().toLowerCase();
+  if (!process.env.ADMIN_EMAIL) {
+    console.info('[AUTH] ADMIN_EMAIL not set in environment. Using default administrator: ' + adminEmail);
   }
 
   const existing = await findUserByEmail(adminEmail);

@@ -11,7 +11,6 @@ import { Footer } from './components/layout/Footer';
 import { HeroSection } from './features/hero/HeroSection';
 import { HighlightsStrip } from './components/common/HighlightsStrip';
 import { ContinuousImageStrip } from './features/strip/ContinuousImageStrip';
-import { ServicesSection } from './features/services/ServicesSection';
 import { TestimonialsSection } from './features/testimonials/TestimonialsSection';
 import { CtaSection } from './features/cta/CtaSection';
 import { FaqSection } from './features/faq/FaqSection';
@@ -26,7 +25,6 @@ import { GradualLightingTransition } from './components/common/GradualLightingTr
 import { NoirCinematicScene } from './components/common/NoirCinematicScene';
 import { AdminPanel } from './features/admin/AdminPanel';
 import { FadingDissolveTransition } from './components/common/FadingDissolveTransition';
-import { GlobalImagePreloader } from './components/common/GlobalImagePreloader';
 import { SmoothScrollProvider } from './components/common/SmoothScrollProvider';
 
 const PortfolioSite: React.FC = () => {
@@ -124,14 +122,6 @@ const PortfolioSite: React.FC = () => {
           </ScrollThemeSection>
         )}
 
-        {/* 5. Architectural Services & Capabilities — DARK */}
-        {isSectionVisible('showServices') && (
-          <ScrollThemeSection theme="dark" id="services">
-            <ScrollReveal distancePx={32}>
-              <ServicesSection />
-            </ScrollReveal>
-          </ScrollThemeSection>
-        )}
 
         {/* 7. Client Reflections & Public Feedback Submission — DARK */}
         {isSectionVisible('showTestimonials') && (
@@ -229,7 +219,6 @@ export default function App() {
     <StudioProvider>
       <ThemeProvider initialTheme="light">
         <SmoothScrollProvider>
-          <GlobalImagePreloader />
           <MainContent />
         </SmoothScrollProvider>
       </ThemeProvider>

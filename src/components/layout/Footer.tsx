@@ -61,8 +61,8 @@ export const Footer: React.FC = () => {
             </h4>
             <ul className="space-y-2.5 text-xs text-[#D6CBBE] uppercase tracking-wider font-light">
               <li>
-                <a href="#services" className="hover:text-[#B08D57] transition-colors">
-                  Design Capabilities
+                <a href="#noir-sanctuary" className="hover:text-[#B08D57] transition-colors">
+                  Atelier Sanctuary
                 </a>
               </li>
               <li>

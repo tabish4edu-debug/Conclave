@@ -27,7 +27,7 @@ export const Navbar: React.FC = () => {
         setIsScrolled(false);
       }
 
-      const sections = ['home', 'services', 'testimonials', 'contact'];
+      const sections = ['home', 'testimonials', 'contact'];
       for (const sectionId of [...sections].reverse()) {
         const el = document.getElementById(sectionId === 'home' ? 'hero-cinematic' : sectionId);
         if (el) {
@@ -45,7 +45,6 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { label: 'Home', href: '#top', section: 'home' },
-    { label: 'Services', href: '#services', section: 'services' },
     { label: 'Testimonials', href: '#testimonials', section: 'testimonials' },
     { label: 'Contact', href: '#contact', section: 'contact' },
   ];

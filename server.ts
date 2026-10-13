@@ -460,10 +460,9 @@ async function startServer() {
       }
 
       // Check configured administrator email
-      const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-      if (!authorizedEmail) {
-        console.error('Server configuration error: ADMIN_EMAIL is not set in environment.');
-        return res.status(500).json({ error: 'Server authentication configuration error.' });
+      const authorizedEmail = (process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com').trim().toLowerCase();
+      if (!process.env.ADMIN_EMAIL) {
+        console.warn('[AUTH] ADMIN_EMAIL not set in environment. Falling back to default administrator: ' + authorizedEmail);
       }
 
       // Constant-time-like generic failure if email does not match admin email
@@ -557,8 +556,8 @@ async function startServer() {
         return res.json({ authenticated: false, user: null });
       }
 
-      const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-      if (!authorizedEmail || verified.user.email.toLowerCase() !== authorizedEmail || verified.user.role !== 'admin') {
+      const authorizedEmail = (process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com').trim().toLowerCase();
+      if (verified.user.email.toLowerCase() !== authorizedEmail || verified.user.role !== 'admin') {
         res.clearCookie('conclave_session', { path: '/' });
         return res.json({ authenticated: false, user: null });
       }
