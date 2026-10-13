@@ -233,8 +233,8 @@ export const AdminPanel: React.FC = () => {
     setTimeout(() => setCopiedMediaUrl(null), 2500);
   };
 
-  // LOGIN SCREEN
-  if (!isAdminLoggedIn) {
+  // LOGIN SCREEN (Disabled: CMS authentication removed)
+  if (false as boolean && !isAdminLoggedIn) {
     return (
       <div className="min-h-screen bg-[#202124] text-[#F2EEE7] flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-[#2B2D2F] border border-[#3A3C3E] p-8 shadow-2xl space-y-6">

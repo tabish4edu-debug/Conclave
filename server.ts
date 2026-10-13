@@ -428,157 +428,67 @@ async function startServer() {
     path: '/',
   };
 
-  // Administrator Login Endpoint (Protected against brute-force & cross-site forgery)
+  // Administrator Login Endpoint (CMS Authentication Removed: Auto-authorizes Admin)
   app.post('/api/auth/login', async (req, res) => {
     try {
-      if (!isTrustedOrigin(req)) {
-        return res.status(403).json({ error: 'Forbidden: Cross-site request origin rejected.' });
-      }
-
-      const forwarded = req.headers['x-forwarded-for'];
-      const clientIp =
-        (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined) ||
-        req.ip ||
-        req.socket.remoteAddress ||
-        'unknown-client';
-
-      const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-      const password = typeof req.body.password === 'string' ? req.body.password : '';
-
-      // Check brute-force limits
-      const bruteCheck = checkLoginBruteForce(clientIp, email);
-      if (bruteCheck.blocked) {
-        res.setHeader('Retry-After', String(bruteCheck.retryAfterSeconds || 900));
-        return res.status(429).json({
-          error: 'Too many failed login attempts. Please wait 15 minutes before trying again.',
-          retryAfterSeconds: bruteCheck.retryAfterSeconds,
-        });
-      }
-
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required.' });
-      }
-
-      // Check configured administrator email
       const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
-      if (!process.env.ADMIN_EMAIL) {
-        console.warn('[AUTH] ADMIN_EMAIL not set in environment. Falling back to default administrator: ' + authorizedEmail);
-      }
-
-      // Constant-time-like generic failure if email does not match admin email
-      if (email !== authorizedEmail) {
-        recordFailedLogin(clientIp, email);
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-
-      // Locate administrator in PostgreSQL
-      const user = await findUserByEmail(email);
-      if (!user || user.role !== 'admin' || !user.passwordHash) {
-        recordFailedLogin(clientIp, email);
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-
-      // Verify bcrypt password hash
-      const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-      if (!passwordMatch) {
-        recordFailedLogin(clientIp, email);
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-
-      // Successful authentication — reset rate-limit tracking
-      resetFailedLogin(clientIp, email);
-
-      // Create cryptographically secure session
-      const { rawToken } = await createSession(user.id, 7);
-      const csrfToken = crypto.randomBytes(16).toString('hex');
-
-      // Set HTTP-only session cookie and CSRF token cookie
-      res.cookie('conclave_session', rawToken, sessionCookieOptions);
-      res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
-
-      // Return safe user information only (never password_hash or session secrets)
-      return res.json({
-        authenticated: true,
-        user: {
-          id: user.id,
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          role: user.role,
-        },
-        csrfToken,
-      });
-    } catch (error: any) {
-      console.error('Login processing error:', error);
-      return res.status(500).json({ error: 'An error occurred during authentication.' });
-    }
-  });
-
-  // Administrator Logout Endpoint
-  app.post('/api/auth/logout', async (req, res) => {
-    try {
-      if (!isTrustedOrigin(req)) {
-        return res.status(403).json({ error: 'Forbidden: Cross-site request origin rejected.' });
-      }
-
-      if (isCookieAuthenticated(req)) {
-        const csrfCookie = extractCsrfCookie(req);
-        const csrfHeader = extractCsrfHeader(req);
-        if (!csrfCookie || !csrfHeader || !safeCompareTokens(csrfCookie, csrfHeader)) {
-          return res.status(403).json({ error: 'Forbidden: Invalid or missing CSRF token.' });
-        }
-      }
-
-      const token = extractSessionToken(req);
-      if (token) {
-        await deleteSession(token);
-      }
-      res.clearCookie('conclave_session', { path: '/' });
-      res.clearCookie('conclave_csrf', { path: '/' });
-      return res.json({ success: true, message: 'Logged out successfully.' });
-    } catch (error: any) {
-      console.error('Logout error:', error);
-      return res.status(500).json({ error: 'Failed to complete logout.' });
-    }
-  });
-
-  // Current Session Endpoint (Safe metadata only)
-  app.get('/api/auth/session', async (req, res) => {
-    try {
-      const token = extractSessionToken(req);
-      if (!token) {
-        return res.json({ authenticated: false, user: null });
-      }
-
-      const verified = await verifySessionToken(token);
-      if (!verified || !verified.user) {
-        res.clearCookie('conclave_session', { path: '/' });
-        return res.json({ authenticated: false, user: null });
-      }
-
-      const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
-      if (verified.user.email.toLowerCase() !== authorizedEmail || verified.user.role !== 'admin') {
-        res.clearCookie('conclave_session', { path: '/' });
-        return res.json({ authenticated: false, user: null });
-      }
-
       const csrfToken = req.cookies?.conclave_csrf || crypto.randomBytes(16).toString('hex');
       res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
 
       return res.json({
         authenticated: true,
         user: {
-          id: verified.user.id,
-          uid: verified.user.uid,
-          email: verified.user.email,
-          displayName: verified.user.displayName,
-          role: verified.user.role,
+          id: 1,
+          uid: 'admin-atelier',
+          email: authorizedEmail,
+          displayName: 'Studio Principal',
+          role: 'admin',
+        },
+        csrfToken,
+      });
+    } catch (error: any) {
+      console.error('Login error:', error);
+      return res.status(500).json({ error: 'Failed to process login.' });
+    }
+  });
+
+  // Administrator Logout Endpoint
+  app.post('/api/auth/logout', async (_req, res) => {
+    res.clearCookie('conclave_session', { path: '/' });
+    res.clearCookie('conclave_csrf', { path: '/' });
+    return res.json({ success: true, message: 'Logged out successfully.' });
+  });
+
+  // Current Session Endpoint (Always provides active Studio Administrator session)
+  app.get('/api/auth/session', async (req, res) => {
+    try {
+      const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
+      const csrfToken = req.cookies?.conclave_csrf || crypto.randomBytes(16).toString('hex');
+      res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
+
+      return res.json({
+        authenticated: true,
+        user: {
+          id: 1,
+          uid: 'admin-atelier',
+          email: authorizedEmail,
+          displayName: 'Studio Principal',
+          role: 'admin',
         },
         csrfToken,
       });
     } catch (error: any) {
       console.error('Session retrieval error:', error);
-      return res.json({ authenticated: false, user: null });
+      return res.json({
+        authenticated: true,
+        user: {
+          id: 1,
+          uid: 'admin-atelier',
+          email: 'conclaveinteriorexterior@gmail.com',
+          displayName: 'Studio Principal',
+          role: 'admin',
+        },
+      });
     }
   });
 

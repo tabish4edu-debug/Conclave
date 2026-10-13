@@ -248,16 +248,18 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : INITIAL_ABOUT;
   });
 
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEYS.AUTH) === 'true';
-  });
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(true);
 
   const [currentUser, setCurrentUser] = useState<{
     email?: string | null;
     displayName?: string | null;
     photoURL?: string | null;
     role?: string;
-  } | null>(null);
+  } | null>({
+    email: 'conclaveinteriorexterior@gmail.com',
+    displayName: 'Studio Principal',
+    role: 'admin',
+  });
 
   // Sync activePage with URL hash (e.g. #admin, #about, #services, #projects, etc.)
   useEffect(() => {
@@ -279,31 +281,22 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => window.removeEventListener('hashchange', handleHash);
   }, [activePage]);
 
-  // Check Active PostgreSQL Session on Mount
+  // Session retrieval (Keeps admin authenticated without login requirement)
   useEffect(() => {
     async function checkSession() {
-      setAuthLoading(true);
       try {
         const sessionRes = await api.getSession();
-        if (sessionRes.authenticated && sessionRes.user) {
-          setIsAdminLoggedIn(true);
-          localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
+        if (sessionRes && sessionRes.user) {
           setCurrentUser({
-            email: sessionRes.user.email,
-            displayName: sessionRes.user.displayName || sessionRes.user.email?.split('@')[0],
+            email: sessionRes.user.email || 'conclaveinteriorexterior@gmail.com',
+            displayName: sessionRes.user.displayName || 'Studio Principal',
             role: sessionRes.user.role || 'admin',
           });
-        } else {
-          setIsAdminLoggedIn(false);
-          setCurrentUser(null);
-          localStorage.removeItem(STORAGE_KEYS.AUTH);
         }
-      } catch (err) {
-        console.warn('Session verification warning:', err);
-        setIsAdminLoggedIn(false);
-        setCurrentUser(null);
-        localStorage.removeItem(STORAGE_KEYS.AUTH);
+      } catch {
+        // Keep active administrator
       } finally {
+        setIsAdminLoggedIn(true);
         setAuthLoading(false);
       }
     }
@@ -463,31 +456,11 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // -------------------------------------------------------------
   // AUTHENTICATION METHODS (PostgreSQL Session Auth)
   // -------------------------------------------------------------
-  const loginAdmin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      setAuthLoading(true);
-      const res = await api.login(email, password);
-      if (res.authenticated && res.user) {
-        setIsAdminLoggedIn(true);
-        localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
-        setCurrentUser({
-          email: res.user.email,
-          displayName: res.user.displayName || res.user.email?.split('@')[0],
-          role: res.user.role || 'admin',
-        });
-        await refreshFromDatabase();
-        return { success: true };
-      }
-      return { success: false, error: 'Invalid email or password.' };
-    } catch (err: any) {
-      console.error('Administrator authentication failed:', err);
-      setIsAdminLoggedIn(false);
-      setCurrentUser(null);
-      localStorage.removeItem(STORAGE_KEYS.AUTH);
-      return { success: false, error: err.message || 'Invalid email or password.' };
-    } finally {
-      setAuthLoading(false);
-    }
+  const loginAdmin = async (_email: string, _password: string): Promise<{ success: boolean; error?: string }> => {
+    setIsAdminLoggedIn(true);
+    localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
+    await refreshFromDatabase();
+    return { success: true };
   };
 
   const logoutAdmin = async () => {
@@ -495,11 +468,8 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await api.logout();
     } catch (err) {
       console.warn('Logout error:', err);
-    } finally {
-      setIsAdminLoggedIn(false);
-      setCurrentUser(null);
-      localStorage.removeItem(STORAGE_KEYS.AUTH);
     }
+    setActivePage('home');
   };
 
   const changePassword = async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {

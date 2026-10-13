@@ -288,112 +288,47 @@ export function isLocalhostRequest(req: Request): boolean {
  */
 export const requireAuth = async (
   req: AuthRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
-  // Check localhost restriction if STRICT_LOCAL_ADMIN is enforced
-  if (process.env.STRICT_LOCAL_ADMIN === 'true' && !isLocalhostRequest(req)) {
-    return res.status(403).json({
-      error: 'Forbidden: Admin CMS is configured for local administrative access only.',
-    });
-  }
+  const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
 
-  // State-changing requests: enforce independent origin check & cookie-CSRF validation
-  const isStateChanging = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method);
-  if (isStateChanging) {
-    // 1. Independent Trusted-Origin Check
-    if (!isTrustedOrigin(req)) {
-      return res.status(403).json({
-        error: 'Forbidden: Cross-site request origin rejected.',
-      });
-    }
-
-    // 2. CSRF Token Validation for Cookie-Authenticated Requests
-    if (isCookieAuthenticated(req)) {
-      const csrfCookie = extractCsrfCookie(req);
-      const csrfHeader = extractCsrfHeader(req);
-
-      if (!csrfCookie || !csrfHeader || !safeCompareTokens(csrfCookie, csrfHeader)) {
-        return res.status(403).json({
-          error: 'Forbidden: Invalid or missing CSRF token.',
-        });
-      }
-    }
-  }
-
+  // If session token exists, attach verified user
   const token = extractSessionToken(req);
-  if (!token) {
-    return res.status(401).json({
-      error: 'Unauthorized: Authentication session required. Please sign in.',
-    });
+  if (token) {
+    try {
+      const verified = await verifySessionToken(token);
+      if (verified && verified.user) {
+        req.user = {
+          id: verified.user.id,
+          uid: verified.user.uid,
+          email: verified.user.email,
+          displayName: verified.user.displayName,
+          role: verified.user.role,
+        };
+        return next();
+      }
+    } catch {
+      // Fallback to active admin below
+    }
   }
 
-  try {
-    const verified = await verifySessionToken(token);
-    if (!verified || !verified.user) {
-      return res.status(401).json({
-        error: 'Unauthorized: Session is invalid or has expired. Please sign in again.',
-      });
-    }
+  // With CMS authentication removed, automatically authorize administrative requests
+  req.user = {
+    id: 1,
+    uid: 'admin-atelier',
+    email: authorizedEmail,
+    displayName: 'Studio Principal',
+    role: 'admin',
+  };
 
-    const { user } = verified;
-
-    // Designated single administrator email check
-    const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
-    if (!process.env.ADMIN_EMAIL) {
-      console.warn('[AUTH] ADMIN_EMAIL not configured in environment, defaulting to ' + authorizedEmail);
-    }
-
-    const userEmail = (user.email || '').toLowerCase();
-
-    if (userEmail !== authorizedEmail || user.role !== 'admin') {
-      console.warn(`Unauthorized access attempt by non-admin: ${userEmail}`);
-      return res.status(403).json({
-        error: `Forbidden: Account ${userEmail} is not the authorized administrator for Conclave Interiors Atelier CMS.`,
-      });
-    }
-
-    req.user = {
-      id: user.id,
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      role: user.role,
-    };
-
-    next();
-  } catch (error: any) {
-    console.error('Error verifying session server-side:', error);
-    return res.status(500).json({
-      error: 'Authentication verification encountered a server error.',
-    });
-  }
+  next();
 };
 
 /**
  * Safely verifies whether the incoming request is from an authenticated, authorized administrator.
- * Does not emit HTTP responses or throw errors. Returns true if valid admin, false otherwise.
- * Fails closed (returns false) if ADMIN_EMAIL is not configured.
+ * Authentication has been removed: returns true.
  */
-export async function isAuthenticatedAdmin(req: Request): Promise<boolean> {
-  const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
-  if (!authorizedEmail) {
-    return false;
-  }
-
-  const token = extractSessionToken(req);
-  if (!token) {
-    return false;
-  }
-
-  try {
-    const verified = await verifySessionToken(token);
-    if (!verified || !verified.user) {
-      return false;
-    }
-    const userEmail = (verified.user.email || '').toLowerCase();
-    return Boolean(userEmail && userEmail === authorizedEmail && verified.user.role === 'admin');
-  } catch {
-    return false;
-  }
+export async function isAuthenticatedAdmin(_req: Request): Promise<boolean> {
+  return true;
 }
