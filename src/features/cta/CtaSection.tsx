@@ -41,7 +41,7 @@ export const CtaSection: React.FC = () => {
         }}
       >
         <img
-          src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=2000&q=85"
+          src="/images/hero/contemporary-marble-kitchen.jpg"
           alt="Architectural interior sanctuary backdrop"
           loading="lazy"
           className="w-full h-full object-cover object-center filter grayscale-[30%] contrast-[1.1]"
@@ -129,7 +129,7 @@ export const CtaSection: React.FC = () => {
           >
             <div className="relative aspect-[4/5] w-full overflow-hidden shadow-2xl border border-[#3A3C3E] bg-[#2B2D2F] group">
               <img
-                src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=85"
+                src="/images/projects/monolithic-travertine-pavilion.jpg"
                 alt="Conclave Interiors Architectural Residence"
                 loading="lazy"
                 className="w-full h-full object-cover object-center transition-transform duration-1000 ease-out group-hover:scale-105"

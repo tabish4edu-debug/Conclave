@@ -118,9 +118,9 @@ export const ContinuousImageStrip: React.FC = () => {
           role="dialog"
           aria-modal="true"
           aria-label={activeLightboxItem.title}
-          className="fixed inset-0 z-50 bg-[#202124]/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-[#202124]/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-cinematic-backdrop-in"
         >
-          <div className="relative max-w-4xl w-full bg-[#2B2D2F] border border-[#B08D57]/40 shadow-2xl overflow-hidden">
+          <div className="relative max-w-4xl w-full bg-[#2B2D2F] border border-[#B08D57]/40 shadow-2xl overflow-hidden animate-cinematic-modal-in">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#3A3C3E] bg-[#202124]">
               <div>

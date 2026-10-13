@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStudio } from '../../context/StudioContext';
+import { FadingDissolveTransition } from '../../components/common/FadingDissolveTransition';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -670,6 +671,8 @@ export const AdminPanel: React.FC = () => {
           </div>
         </div>
 
+        {/* TAB CONTENT WITH FADING-DISSOLVE TRANSITIONS */}
+        <FadingDissolveTransition activeKey={currentTab} className="w-full">
         {/* TAB 1: DASHBOARD */}
         {currentTab === 'dashboard' && (
           <div className="space-y-8">
@@ -868,10 +871,10 @@ export const AdminPanel: React.FC = () => {
                       architecturalBrief: 'Architectural requirements and materiality study...',
                       materialsPalette: ['Honed Travertine', 'Fumed Oak', 'Patinated Bronze'],
                       coverImage:
-                        'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80',
+                        '/images/projects/monolithic-travertine-pavilion.jpg',
                       galleryImages: [
                         {
-                          url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1400&q=85',
+                          url: '/images/projects/monolithic-travertine-pavilion.jpg',
                           alt: 'Main living gallery',
                         },
                       ],
@@ -1281,7 +1284,7 @@ export const AdminPanel: React.FC = () => {
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=400&q=80';
+                              '/images/projects/monolithic-travertine-pavilion.jpg';
                           }}
                         />
                       </div>
@@ -1467,7 +1470,7 @@ export const AdminPanel: React.FC = () => {
                               className="w-full h-full object-cover transition-transform group-hover:scale-105"
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src =
-                                  'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=400&q=80';
+                                  '/images/projects/monolithic-travertine-pavilion.jpg';
                               }}
                             />
                           )}
@@ -1549,7 +1552,7 @@ export const AdminPanel: React.FC = () => {
                     secondaryCtaText: 'REQUEST CONSULTATION',
                     secondaryCtaLink: '#contact',
                     imageUrl:
-                      'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1800&q=85',
+                      '/images/hero/contemporary-marble-kitchen.jpg',
                     imageAlt: 'Interior architecture',
                     layoutMode: 'split',
                     sortOrder: heroSlides.length + 1,
@@ -1761,7 +1764,7 @@ export const AdminPanel: React.FC = () => {
                     title: 'Bespoke Interior',
                     category: 'Residential',
                     imageUrl:
-                      'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=800&q=80',
+                      '/images/projects/monolithic-travertine-pavilion.jpg',
                     altText: 'Bespoke interior architecture view',
                     isPublished: true,
                     sortOrder: stripItems.length + 1,
@@ -2880,6 +2883,7 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
         )}
+        </FadingDissolveTransition>
       </main>
 
       {/* PUBLISH BATCH CONFIRMATION MODAL */}

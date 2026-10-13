@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -6,12 +7,19 @@ import cookieParser from 'cookie-parser';
 import bcrypt from 'bcryptjs';
 import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
+import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import {
   requireAuth,
   AuthRequest,
   isLocalhostRequest,
   isAuthenticatedAdmin,
   extractSessionToken,
+  isTrustedOrigin,
+  isCookieAuthenticated,
+  extractCsrfCookie,
+  extractCsrfHeader,
+  safeCompareTokens,
 } from './src/middleware/auth.ts';
 import { storageService } from './src/lib/storage.ts';
 import { sanitizeHtml, sanitizeText } from './src/lib/sanitize.ts';
@@ -214,7 +222,18 @@ async function startServer() {
     },
   });
 
-  app.use(cookieParser(process.env.SESSION_SECRET || 'conclave_atelier_session_secret'));
+  const isProduction = process.env.NODE_ENV === 'production';
+  const sessionSecret = process.env.SESSION_SECRET;
+
+  if (isProduction) {
+    if (!sessionSecret || sessionSecret === 'conclave_atelier_session_secret' || sessionSecret.length < 32) {
+      throw new Error(
+        'SECURITY FATAL: In production, SESSION_SECRET must be explicitly set with a unique, cryptographically strong secret of at least 32 characters.'
+      );
+    }
+  }
+
+  app.use(cookieParser(sessionSecret || 'conclave_atelier_session_secret'));
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -394,7 +413,6 @@ async function startServer() {
   // -------------------------------------------------------------
   // POSTGRESQL ADMIN SESSION AUTHENTICATION
   // -------------------------------------------------------------
-  const isProduction = process.env.NODE_ENV === 'production';
   const sessionCookieOptions: express.CookieOptions = {
     httpOnly: true,
     secure: isProduction,
@@ -410,9 +428,13 @@ async function startServer() {
     path: '/',
   };
 
-  // Administrator Login Endpoint (Protected against brute-force)
+  // Administrator Login Endpoint (Protected against brute-force & cross-site forgery)
   app.post('/api/auth/login', async (req, res) => {
     try {
+      if (!isTrustedOrigin(req)) {
+        return res.status(403).json({ error: 'Forbidden: Cross-site request origin rejected.' });
+      }
+
       const forwarded = req.headers['x-forwarded-for'];
       const clientIp =
         (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined) ||
@@ -496,6 +518,18 @@ async function startServer() {
   // Administrator Logout Endpoint
   app.post('/api/auth/logout', async (req, res) => {
     try {
+      if (!isTrustedOrigin(req)) {
+        return res.status(403).json({ error: 'Forbidden: Cross-site request origin rejected.' });
+      }
+
+      if (isCookieAuthenticated(req)) {
+        const csrfCookie = extractCsrfCookie(req);
+        const csrfHeader = extractCsrfHeader(req);
+        if (!csrfCookie || !csrfHeader || !safeCompareTokens(csrfCookie, csrfHeader)) {
+          return res.status(403).json({ error: 'Forbidden: Invalid or missing CSRF token.' });
+        }
+      }
+
       const token = extractSessionToken(req);
       if (token) {
         await deleteSession(token);
@@ -593,7 +627,11 @@ async function startServer() {
       res.cookie('conclave_session', rawToken, sessionCookieOptions);
       res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
 
-      return res.json({ success: true, message: 'Administrator password changed successfully.' });
+      return res.json({
+        success: true,
+        message: 'Administrator password changed successfully.',
+        csrfToken,
+      });
     } catch (error: any) {
       console.error('Password change error:', error);
       return res.status(500).json({ error: 'Failed to change administrator password.' });
@@ -666,18 +704,31 @@ async function startServer() {
 
   app.post('/api/projects', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const payload = {
+      const generatedId = req.body.id || req.body.slug || `proj-${Date.now()}`;
+      const payload: any = {
         ...req.body,
-        description: sanitizeHtml(req.body.description),
-        architecturalBrief: sanitizeHtml(req.body.architecturalBrief),
-        title: sanitizeText(req.body.title),
-        location: sanitizeText(req.body.location),
-        seoTitle: sanitizeText(req.body.seoTitle),
-        seoDescription: sanitizeText(req.body.seoDescription),
+        id: generatedId,
+        slug: req.body.slug || generatedId,
+        category: req.body.category || 'Residential',
+        location: sanitizeText(req.body.location || ''),
+        year: req.body.year ? String(req.body.year) : new Date().getFullYear().toString(),
+        areaSqFt: req.body.areaSqFt ?? req.body.area_sq_ft ?? null,
+        description: sanitizeHtml(req.body.description || ''),
+        architecturalBrief: sanitizeHtml(req.body.architecturalBrief || req.body.architectural_brief || ''),
+        title: sanitizeText(req.body.title || 'Untitled Monograph'),
+        coverImage: req.body.coverImage || req.body.cover_image || '/images/projects/monolithic-travertine-pavilion.jpg',
+        galleryImages: req.body.galleryImages || req.body.gallery_images || [],
+        materialsPalette: req.body.materialsPalette || req.body.materials_palette || [],
+        isFeatured: req.body.isFeatured ?? req.body.is_featured ?? false,
+        status: req.body.status || req.body.status || 'draft',
+        sortOrder: req.body.sortOrder ?? req.body.sort_order ?? 0,
+        seoTitle: sanitizeText(req.body.seoTitle || req.body.seo_title || ''),
+        seoDescription: sanitizeText(req.body.seoDescription || req.body.seo_description || ''),
       };
       const newProj = await createProject(payload);
       res.status(201).json(newProj);
     } catch (error: any) {
+      console.error('Error in POST /api/projects:', error);
       res.status(500).json({ error: error.message || 'Failed to create project' });
     }
   });
@@ -972,6 +1023,208 @@ async function startServer() {
     }
   });
 
+  // Helper to construct the branded HTML & plain-text email content
+  function buildEnquiryEmailContent(enquiry: {
+    name: string;
+    email: string;
+    phone?: string | null;
+    projectType?: string | null;
+    location?: string | null;
+    budget?: string | null;
+    preferredContact: string;
+    message: string;
+  }) {
+    const subject = `[New Inquiry] ${enquiry.projectType || 'Commission Brief'} — ${enquiry.name}`;
+    const text = `NEW COMMISSION ENQUIRY\n\nName: ${enquiry.name}\nEmail: ${enquiry.email}\nPhone: ${enquiry.phone || 'N/A'}\nProject Scope: ${enquiry.projectType || 'N/A'}\nLocation: ${enquiry.location || 'N/A'}\nBudget: ${enquiry.budget || 'N/A'}\nPreferred Contact: ${enquiry.preferredContact}\n\nMessage:\n${enquiry.message}\n`;
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 24px; border: 1px solid #D6CBBE; background-color: #FDFBF7; color: #202124;">
+        <div style="border-bottom: 2px solid #B08D57; padding-bottom: 12px; margin-bottom: 20px;">
+          <span style="font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase; color: #B08D57; font-weight: 600;">CONCLAVE INTERIORS · ATELIER NOTIFICATION</span>
+          <h2 style="font-size: 22px; font-weight: 600; margin: 6px 0 0 0; color: #202124;">New Commission Enquiry Received</h2>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; width: 140px; font-size: 13px;">Client Name</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124; font-weight: 600;">${sanitizeText(enquiry.name)}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; font-size: 13px;">Email Address</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124;"><a href="mailto:${sanitizeText(enquiry.email)}" style="color: #B08D57; text-decoration: underline;">${sanitizeText(enquiry.email)}</a></td>
+          </tr>
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; font-size: 13px;">Phone / WhatsApp</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124;">${sanitizeText(enquiry.phone || 'Not provided')}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; font-size: 13px;">Project Scope</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124;">${sanitizeText(enquiry.projectType || 'Turnkey Scope')}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; font-size: 13px;">Location</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124;">${sanitizeText(enquiry.location || 'Not provided')}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; font-size: 13px;">Budget Allocation</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124;">${sanitizeText(enquiry.budget || 'Not specified')}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #E5DFD5;">
+            <td style="padding: 10px 0; font-weight: 600; color: #8C8276; font-size: 13px;">Preferred Contact</td>
+            <td style="padding: 10px 0; font-size: 14px; color: #202124; text-transform: uppercase;">${sanitizeText(enquiry.preferredContact)}</td>
+          </tr>
+        </table>
+
+        <div style="background-color: #F2EEE7; padding: 16px; border-left: 3px solid #B08D57; margin-bottom: 24px;">
+          <p style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #8C8276; margin: 0 0 8px 0;">Inquiry Narrative</p>
+          <p style="font-size: 14px; line-height: 1.6; margin: 0; color: #202124; white-space: pre-wrap;">${sanitizeText(enquiry.message)}</p>
+        </div>
+
+        <div style="font-size: 11px; color: #8C8276; border-top: 1px solid #E5DFD5; padding-top: 14px;">
+          This notification was generated automatically by the Conclave Interiors enquiry system. All inquiries are securely stored in the studio database and accessible via the administration dashboard.
+        </div>
+      </div>
+    `;
+    return { subject, text, html };
+  }
+
+  // Redact error messages to prevent accidental logging of credentials, keys, or client tokens
+  function sanitizeErrorForLog(err: any): string {
+    if (!err) return 'Unknown error';
+    let msg = typeof err === 'string' ? err : err.message || JSON.stringify(err);
+    msg = msg.replace(/re_[a-zA-Z0-9_-]+/g, 're_***');
+    msg = msg.replace(/Bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer ***');
+    msg = msg.replace(/pass(word)?[:=]\s*["']?[^"'&\s]+/gi, 'password=***');
+    return msg;
+  }
+
+  // Dispatch email notification helper for commission enquiries
+  // Supports HTTPS transactional email API (Resend via port 443 - works on Render Free)
+  // as well as fallback to Nodemailer SMTP for local development.
+  async function dispatchEnquiryEmail(enquiry: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+    projectType?: string | null;
+    location?: string | null;
+    budget?: string | null;
+    preferredContact: string;
+    message: string;
+  }): Promise<{ dispatched: boolean; recipient: string; transport: 'resend-https' | 'smtp' | 'none'; reason?: string }> {
+    const recipient =
+      process.env.ENQUIRY_NOTIFICATION_EMAIL ||
+      process.env.ADMIN_EMAIL ||
+      'conclaveinteriorexterior@gmail.com';
+
+    const { subject, text, html } = buildEnquiryEmailContent(enquiry);
+
+    // =========================================================================
+    // 1. PRIORITY: HTTPS Transactional Email API (Resend via Port 443)
+    // Render Free allows port 443, making this the standard production transport.
+    // =========================================================================
+    const resendApiKey = process.env.RESEND_API_KEY?.trim();
+    if (resendApiKey) {
+      try {
+        const resend = new Resend(resendApiKey);
+        const fromAddress =
+          process.env.RESEND_FROM_EMAIL?.trim() ||
+          'Conclave Interiors <onboarding@resend.dev>';
+
+        const response = await resend.emails.send({
+          from: fromAddress,
+          to: recipient,
+          replyTo: enquiry.email,
+          subject,
+          text,
+          html,
+        });
+
+        if (response.error) {
+          const redactedErr = sanitizeErrorForLog(response.error);
+          console.error(`[EMAIL DISPATCH ERROR] Resend HTTPS API returned error:`, redactedErr);
+          return {
+            dispatched: false,
+            recipient,
+            transport: 'resend-https',
+            reason: `Resend API error: ${redactedErr}`,
+          };
+        }
+
+        console.log(`[EMAIL DISPATCH SUCCESS] Inquiry email sent via Resend HTTPS API to ${recipient}. EmailId: ${response.data?.id}`);
+        return { dispatched: true, recipient, transport: 'resend-https' };
+      } catch (err: any) {
+        const redactedErr = sanitizeErrorForLog(err);
+        console.error(`[EMAIL DISPATCH ERROR] Failed to send enquiry email via Resend HTTPS API:`, redactedErr);
+        return {
+          dispatched: false,
+          recipient,
+          transport: 'resend-https',
+          reason: `Resend HTTPS transmission failed: ${redactedErr}`,
+        };
+      }
+    }
+
+    // =========================================================================
+    // 2. FALLBACK: SMTP Transport (Nodemailer for local development)
+    // Note: Render Free blocks ports 25, 465, and 587. For Render, configure RESEND_API_KEY.
+    // =========================================================================
+    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+
+    if (smtpUser && smtpPass) {
+      const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+      const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
+      const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465;
+
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+
+        const mailOptions = {
+          from: `"${enquiry.name} via Conclave Interiors" <${smtpUser}>`,
+          replyTo: enquiry.email,
+          to: recipient,
+          subject,
+          text,
+          html,
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[EMAIL DISPATCH SUCCESS] Inquiry email sent via SMTP to ${recipient}. MessageId: ${info.messageId}`);
+        return { dispatched: true, recipient, transport: 'smtp' };
+      } catch (err: any) {
+        const redactedErr = sanitizeErrorForLog(err);
+        console.error(`[EMAIL DISPATCH ERROR] Failed to send enquiry email via SMTP:`, redactedErr);
+        return {
+          dispatched: false,
+          recipient,
+          transport: 'smtp',
+          reason: `SMTP transmission failed: ${redactedErr}`,
+        };
+      }
+    }
+
+    // =========================================================================
+    // 3. NEITHER CONFIGURED: Inform in logs that inquiry was stored in DB only
+    // =========================================================================
+    console.warn(
+      `[EMAIL DISPATCH NOTICE] Inquiry ID "${enquiry.id}" was safely saved to the database. External email delivery is inactive because neither RESEND_API_KEY (for HTTPS email on Render) nor SMTP credentials (for local dev) are set in environment variables.`
+    );
+    return {
+      dispatched: false,
+      recipient,
+      transport: 'none',
+      reason: 'No email transport configured in environment variables (set RESEND_API_KEY for Render Free or SMTP_USER/SMTP_PASS for local dev).',
+    };
+  }
+
   // Public enquiry submission (rate-limited, sanitized, privacy-safe logging)
   app.post('/api/enquiries', publicFormLimiter, async (req, res) => {
     try {
@@ -979,6 +1232,8 @@ async function startServer() {
       if (!name || !email || !message) {
         return res.status(400).json({ error: 'Name, email, and message are required' });
       }
+
+      // 1. Store the enquiry in PostgreSQL / database first
       const created = await createEnquiry({
         name: sanitizeText(name),
         email: sanitizeText(email),
@@ -995,11 +1250,42 @@ async function startServer() {
       const redactedPhone = phone ? phone.replace(/.(?=.{4})/g, '*') : '[none]';
       console.log(`[COMMISSION INQUIRY RECEIVED] ID: ${created.id}, Type: ${projectType || 'Standard'}, Contact: ${preferredContact}, From: ${redactedEmail}, Phone: ${redactedPhone}`);
 
+      // 2. Attempt email delivery (failure never prevents or undoes the stored enquiry)
+      let emailResult: {
+        dispatched: boolean;
+        recipient: string;
+        transport: 'resend-https' | 'smtp' | 'none';
+        reason?: string;
+      } = {
+        dispatched: false,
+        recipient: process.env.ENQUIRY_NOTIFICATION_EMAIL || 'conclaveinteriorexterior@gmail.com',
+        transport: 'none',
+        reason: 'Email dispatch skipped',
+      };
+
+      try {
+        emailResult = await dispatchEnquiryEmail({
+          id: created.id,
+          name: created.name,
+          email: created.email,
+          phone: created.phone,
+          projectType: created.projectType,
+          location: created.location,
+          budget: created.budget,
+          preferredContact: created.preferredContact,
+          message: created.message,
+        });
+      } catch (dispatchErr: any) {
+        const sanitizedErr = sanitizeErrorForLog(dispatchErr);
+        console.error(`[EMAIL DISPATCH UNEXPECTED ERROR]`, sanitizedErr);
+        emailResult.reason = `Unexpected error: ${sanitizedErr}`;
+      }
+
+      // 3. Return HTTP 201 with saved enquiry ID and generic visitor confirmation (no personal or internal fields)
       res.status(201).json({
         success: true,
-        message: 'Commission inquiry received and credentials emailed to conclaveinteriorexterior@gmail.com.',
-        item: created,
-        emailDispatchedTo: 'conclaveinteriorexterior@gmail.com',
+        message: 'Thank you for your enquiry. Your commission brief has been received by our studio team.',
+        id: created.id,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Failed to submit enquiry' });

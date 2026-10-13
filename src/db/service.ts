@@ -55,9 +55,30 @@ export async function initAdminAccount() {
   const existing = await findUserByEmail(adminEmail);
   const initialPassword = process.env.ADMIN_INITIAL_PASSWORD?.trim();
 
+  // Helper to validate production initial password strength
+  const validateProductionPassword = (pwd: string | undefined) => {
+    if (process.env.NODE_ENV === 'production') {
+      const devDefaults = [
+        'TestSecurePass123!',
+        'YourSecureAdminPassword123!',
+        'admin',
+        'password',
+        '12345678',
+        'admin123',
+      ];
+      if (!pwd || devDefaults.includes(pwd) || pwd.length < 12) {
+        throw new Error(
+          'SECURITY FATAL: In production, ADMIN_INITIAL_PASSWORD must be a unique, strong password (minimum 12 characters) and cannot use development placeholders.'
+        );
+      }
+    }
+  };
+
   if (existing) {
     // If the existing admin record has no password and ADMIN_INITIAL_PASSWORD is provided, set it
+    // Note: If passwordHash is already present, it is preserved completely (preventing accidental password resets)
     if (!existing.passwordHash && initialPassword) {
+      validateProductionPassword(initialPassword);
       const passwordHash = await bcrypt.hash(initialPassword, 12);
       await db
         .update(users)
@@ -67,6 +88,9 @@ export async function initAdminAccount() {
     }
   } else {
     // Create new admin user record
+    if (initialPassword) {
+      validateProductionPassword(initialPassword);
+    }
     const passwordHash = initialPassword ? await bcrypt.hash(initialPassword, 12) : null;
     const uid = `admin-${crypto.randomBytes(8).toString('hex')}`;
     await db.insert(users).values({
@@ -193,28 +217,66 @@ export async function getProjectById(id: string, onlyPublished = false) {
 
 export async function createProject(data: typeof projects.$inferInsert) {
   try {
-    const res = await db.insert(projects).values({
+    const raw = data as any;
+    const sanitizedData: typeof projects.$inferInsert = {
       ...data,
+      category: data.category || raw.category || 'Residential',
+      location: data.location || raw.location || '',
+      year: data.year ? String(data.year) : new Date().getFullYear().toString(),
+      areaSqFt: data.areaSqFt ?? raw.area_sq_ft ?? null,
+      description: data.description || raw.description || '',
+      architecturalBrief: data.architecturalBrief || raw.architectural_brief || '',
+      materialsPalette: data.materialsPalette || raw.materials_palette || [],
+      coverImage: data.coverImage || raw.cover_image || '/images/projects/monolithic-travertine-pavilion.jpg',
+      galleryImages: data.galleryImages || raw.gallery_images || [],
+      isFeatured: data.isFeatured ?? raw.is_featured ?? false,
+      status: data.status || raw.status || 'draft',
+      sortOrder: data.sortOrder ?? raw.sort_order ?? 0,
+      seoTitle: data.seoTitle || raw.seo_title || null,
+      seoDescription: data.seoDescription || raw.seo_description || null,
       hasUnpublishedChanges: true,
-    }).returning();
+    };
+    const res = await db.insert(projects).values(sanitizedData).returning();
     return res[0];
   } catch (error) {
     console.error('Error creating project:', error);
-    throw new Error('Could not create project');
+    throw error;
   }
 }
 
 export async function updateProject(id: string, data: Partial<typeof projects.$inferInsert>) {
   try {
+    const raw = data as any;
+    const updates: any = { ...data };
+    if (raw.cover_image !== undefined && updates.coverImage === undefined) updates.coverImage = raw.cover_image;
+    if (raw.materials_palette !== undefined && updates.materialsPalette === undefined) updates.materialsPalette = raw.materials_palette;
+    if (raw.gallery_images !== undefined && updates.galleryImages === undefined) updates.galleryImages = raw.gallery_images;
+    if (raw.architectural_brief !== undefined && updates.architecturalBrief === undefined) updates.architecturalBrief = raw.architectural_brief;
+    if (raw.area_sq_ft !== undefined && updates.areaSqFt === undefined) updates.areaSqFt = raw.area_sq_ft;
+    if (raw.is_featured !== undefined && updates.isFeatured === undefined) updates.isFeatured = raw.is_featured;
+    if (raw.sort_order !== undefined && updates.sortOrder === undefined) updates.sortOrder = raw.sort_order;
+    if (raw.seo_title !== undefined && updates.seoTitle === undefined) updates.seoTitle = raw.seo_title;
+    if (raw.seo_description !== undefined && updates.seoDescription === undefined) updates.seoDescription = raw.seo_description;
+
+    delete updates.cover_image;
+    delete updates.materials_palette;
+    delete updates.gallery_images;
+    delete updates.architectural_brief;
+    delete updates.area_sq_ft;
+    delete updates.is_featured;
+    delete updates.sort_order;
+    delete updates.seo_title;
+    delete updates.seo_description;
+
     const res = await db
       .update(projects)
-      .set({ ...data, hasUnpublishedChanges: true, updatedAt: new Date() })
+      .set({ ...updates, hasUnpublishedChanges: true, updatedAt: new Date() })
       .where(eq(projects.id, id))
       .returning();
     return res[0];
   } catch (error) {
     console.error(`Error updating project ${id}:`, error);
-    throw new Error('Could not update project');
+    throw error;
   }
 }
 
@@ -866,13 +928,38 @@ export async function getUnpublishedChangesSummary() {
       summary.push({ type: 'About', title: 'Studio Story & Manifesto', action: 'Atelier story updates pending' });
     }
 
+    const unpublishedSummary = {
+      projects: summary.filter((s) => s.type === 'Project').length,
+      heroSlides: summary.filter((s) => s.type === 'Hero Slide').length,
+      stripItems: summary.filter((s) => s.type === 'Continuous Strip').length,
+      services: summary.filter((s) => s.type === 'Service').length,
+      faqs: summary.filter((s) => s.type === 'FAQ').length,
+      about: summary.some((s) => s.type === 'About'),
+      settings: summary.some((s) => s.type === 'Settings'),
+    };
+
     return {
       count: summary.length,
+      totalUnpublishedItems: summary.length,
       summary,
+      unpublishedSummary,
     };
   } catch (error) {
     console.error('Error fetching unpublished changes:', error);
-    return { count: 0, summary: [] };
+    return {
+      count: 0,
+      totalUnpublishedItems: 0,
+      summary: [],
+      unpublishedSummary: {
+        projects: 0,
+        heroSlides: 0,
+        stripItems: 0,
+        services: 0,
+        faqs: 0,
+        about: false,
+        settings: false,
+      },
+    };
   }
 }
 
@@ -881,12 +968,12 @@ export async function publishBatch(publishedBy: string, email: string, note?: st
     const { count, summary } = await getUnpublishedChangesSummary();
     const batchId = `pub-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
-    // Mark projects as live and clear unpublished flags
-    await db.update(projects).set({ hasUnpublishedChanges: false });
-    await db.update(heroSlides).set({ hasUnpublishedChanges: false });
-    await db.update(stripItems).set({ hasUnpublishedChanges: false });
-    await db.update(services).set({ hasUnpublishedChanges: false });
-    await db.update(faqs).set({ hasUnpublishedChanges: false });
+    // Mark projects and content items as live and clear unpublished flags
+    await db.update(projects).set({ status: 'published', hasUnpublishedChanges: false });
+    await db.update(heroSlides).set({ isPublished: true, hasUnpublishedChanges: false });
+    await db.update(stripItems).set({ isPublished: true, hasUnpublishedChanges: false });
+    await db.update(services).set({ isPublished: true, hasUnpublishedChanges: false });
+    await db.update(faqs).set({ isPublished: true, hasUnpublishedChanges: false });
     await db.update(siteSettings).set({ hasUnpublishedChanges: false });
     await db.update(aboutStudio).set({ hasUnpublishedChanges: false });
 

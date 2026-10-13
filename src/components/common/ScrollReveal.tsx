@@ -101,7 +101,7 @@ export const ScrollReveal: React.FC<ScrollRevealProps> = ({
         isVisible ? 'reveal-visible' : 'reveal-hidden'
       }`}
       style={{
-        transform: isVisible ? 'translateY(0)' : `translateY(${distancePx}px)`,
+        transform: isVisible ? 'none' : `translateY(${distancePx}px)`,
         transitionDelay: delayMs > 0 ? `${delayMs}ms` : undefined,
       }}
     >

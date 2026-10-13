@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useStudio } from '../../context/StudioContext';
 import { ServiceItem } from '../../types';
 import { ArrowUpRight, Check, X } from 'lucide-react';
@@ -76,7 +77,13 @@ const ServiceCardItem: React.FC<ServiceCardItemProps> = ({ service, index, image
             {service.scopeDuration || 'Turnkey Scope'}
           </span>
 
-          <div className="w-8 h-8 rounded-full border border-[#B08D57]/40 bg-[#202124] group-hover:bg-[#B08D57] group-hover:border-[#B08D57] flex items-center justify-center transition-all duration-300">
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(service);
+            }}
+            className="w-8 h-8 rounded-full border border-[#B08D57]/40 bg-[#202124] group-hover:bg-[#B08D57] group-hover:border-[#B08D57] flex items-center justify-center transition-all duration-300"
+          >
             <ArrowUpRight className="w-4 h-4 text-[#B08D57] group-hover:text-[#202124] transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </div>
         </div>
@@ -88,6 +95,15 @@ const ServiceCardItem: React.FC<ServiceCardItemProps> = ({ service, index, image
 export const ServicesSection: React.FC = () => {
   const { services, setIsQueryModalOpen, setQueryInitialTab } = useStudio();
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
+
+  useEffect(() => {
+    if (!selectedService) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedService(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedService]);
 
   // Background architectural interior parallax layer in the back
   const [bgRef, { translateY: bgTranslateY, scale: bgScale }] = useParallax<HTMLDivElement>({
@@ -112,23 +128,23 @@ export const ServicesSection: React.FC = () => {
     if (service.imageUrl) return service.imageUrl;
     const titleLower = service.title.toLowerCase();
     if (titleLower.includes('kitchen')) {
-      return 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80';
+      return '/images/hero/contemporary-marble-kitchen.jpg';
     }
     if (titleLower.includes('wardrobe') || titleLower.includes('closet')) {
-      return 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=800&q=80';
+      return '/images/hero/smoked-oak-library.jpg';
     }
     if (titleLower.includes('commercial') || titleLower.includes('corporate') || titleLower.includes('office')) {
-      return 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80';
+      return '/images/projects/executive-boardroom-sanctuary.jpg';
     }
     if (titleLower.includes('styling') || titleLower.includes('art') || titleLower.includes('furniture')) {
-      return 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=800&q=80';
+      return '/images/hero/noir-atelier-loft.jpg';
     }
     const defaultImages = [
-      'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=800&q=80',
-      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80',
+      '/images/projects/monolithic-travertine-pavilion.jpg',
+      '/images/hero/contemporary-marble-kitchen.jpg',
+      '/images/hero/smoked-oak-library.jpg',
+      '/images/hero/noir-atelier-loft.jpg',
+      '/images/projects/executive-boardroom-sanctuary.jpg',
     ];
     return defaultImages[index % defaultImages.length];
   };
@@ -149,7 +165,7 @@ export const ServicesSection: React.FC = () => {
         }}
       >
         <img
-          src="https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=2400&q=85"
+          src="/images/services/spatial-architecture-zen.jpg"
           alt="Architectural smoked timber and ambient interior lighting"
           className="w-full h-full object-cover object-center opacity-45 filter contrast-[1.10] brightness-[0.88]"
         />
@@ -197,22 +213,30 @@ export const ServicesSection: React.FC = () => {
         </div>
       </div>
 
-      {/* Service Detail Modal */}
-      {selectedService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#202124]/90 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#2B2D2F] border border-[#3A3C3E] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
+      {/* Service Detail Modal (Portaled directly to document.body to ensure strict centering in middle of screen) */}
+      {selectedService && typeof document !== 'undefined' && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="service-modal-title"
+          className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-[#202124]/90 backdrop-blur-md animate-cinematic-backdrop-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedService(null);
+          }}
+        >
+          <div className="bg-[#2B2D2F] border border-[#3A3C3E] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative my-auto animate-cinematic-modal-in">
             <div className="flex items-start justify-between border-b border-[#3A3C3E] pb-4">
               <div>
                 <span className="text-[10px] tracking-[0.25em] uppercase text-[#B08D57] font-semibold block mb-1 font-mono">
                   ARCHITECTURAL SCOPE SPECIFICATION
                 </span>
-                <h3 className="font-serif-title text-2xl sm:text-3xl text-[#F2EEE7]">
+                <h3 id="service-modal-title" className="font-serif-title text-2xl sm:text-3xl text-[#F2EEE7]">
                   {selectedService.title}
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedService(null)}
-                className="text-[#D6CBBE] hover:text-[#B08D57] p-1 cursor-pointer"
+                className="text-[#D6CBBE] hover:text-[#B08D57] p-1.5 cursor-pointer transition-colors"
                 aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
@@ -253,7 +277,8 @@ export const ServicesSection: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

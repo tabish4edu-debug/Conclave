@@ -6,4 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-conclave_backup.dump

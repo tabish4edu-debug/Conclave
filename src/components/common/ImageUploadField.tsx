@@ -163,7 +163,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src =
-                      'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=400&q=80';
+                      '/images/projects/monolithic-travertine-pavilion.jpg';
                   }}
                 />
               )}
@@ -276,7 +276,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
               type="text"
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              placeholder="https://images.unsplash.com/... or /api/media/..."
+              placeholder="/images/... or /api/media/..."
               className="flex-grow px-3 py-2 bg-[#1A1A1A] border border-white/20 focus:border-[#B08D57] text-xs font-mono text-[#F2EEE7] focus:outline-hidden"
             />
             <button
@@ -404,7 +404,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                             className="w-full h-full object-cover transition-transform group-hover:scale-105"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src =
-                                'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=400&q=80';
+                                '/images/projects/monolithic-travertine-pavilion.jpg';
                             }}
                           />
                         )}

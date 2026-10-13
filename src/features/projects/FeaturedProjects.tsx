@@ -99,7 +99,7 @@ const SecondaryProjectCard: React.FC<SecondaryProjectCardProps> = ({ project, in
         </div>
 
         {/* Materials preview */}
-        <div className="pt-4 border-t border-[#D6CBBE] space-y-3">
+        <div className="pt-4 border-t border-[#D6CBBE]">
           <div className="flex flex-wrap gap-1.5">
             {project.materialsPalette.slice(0, 3).map((mat, i) => (
               <span
@@ -109,11 +109,6 @@ const SecondaryProjectCard: React.FC<SecondaryProjectCardProps> = ({ project, in
                 {mat}
               </span>
             ))}
-          </div>
-
-          <div className="flex items-center justify-between pt-1 text-[11px] uppercase tracking-[0.16em] text-[#202124] font-semibold group-hover:text-[#B08D57] transition-colors">
-            <span>Explore Details</span>
-            <ArrowUpRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </div>
         </div>
       </div>
@@ -267,7 +262,7 @@ export const FeaturedProjects: React.FC = () => {
                   </div>
 
                   {/* Materials & Action */}
-                  <div className="pt-6 border-t border-[#D6CBBE] space-y-4">
+                  <div className="pt-6 border-t border-[#D6CBBE]">
                     <div className="flex flex-wrap gap-2">
                       {featuredMonograph.materialsPalette.slice(0, 4).map((mat, i) => (
                         <span
@@ -277,11 +272,6 @@ export const FeaturedProjects: React.FC = () => {
                           {mat}
                         </span>
                       ))}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 text-xs uppercase tracking-[0.18em] text-[#202124] font-semibold group-hover:text-[#B08D57] transition-colors">
-                      <span>Inspect Complete Monograph</span>
-                      <ArrowUpRight className="w-4 h-4 transform group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                     </div>
                   </div>
                 </div>

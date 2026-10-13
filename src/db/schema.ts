@@ -26,14 +26,14 @@ export const projects = pgTable('projects', {
   id: text('id').primaryKey(), // slug-like ID e.g. "noir-monolith-penthouse"
   title: text('title').notNull(),
   slug: text('slug').notNull(),
-  category: text('category').notNull(), // 'Residential' | 'Commercial' | 'Hospitality' | 'Minimalist' | 'Noir Penthouse'
-  location: text('location').notNull(),
-  year: text('year').notNull(),
+  category: text('category').notNull().default('Residential'), // 'Residential' | 'Commercial' | 'Hospitality' | 'Minimalist' | 'Noir Penthouse'
+  location: text('location').notNull().default(''),
+  year: text('year').notNull().default('2026'),
   areaSqFt: integer('area_sq_ft'),
-  description: text('description').notNull(),
-  architecturalBrief: text('architectural_brief').notNull(),
+  description: text('description').notNull().default(''),
+  architecturalBrief: text('architectural_brief').notNull().default(''),
   materialsPalette: jsonb('materials_palette').$type<string[]>().notNull().default([]),
-  coverImage: text('cover_image').notNull(),
+  coverImage: text('cover_image').notNull().default('/images/projects/monolithic-travertine-pavilion.jpg'),
   galleryImages: jsonb('gallery_images').$type<{ url: string; alt: string; caption?: string }[]>().notNull().default([]),
   isFeatured: boolean('is_featured').notNull().default(false),
   status: text('status').notNull().default('published'), // 'published' | 'draft'

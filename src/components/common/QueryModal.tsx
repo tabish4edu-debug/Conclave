@@ -97,14 +97,14 @@ export const QueryModal: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="query-dialog-title"
-      className="fixed inset-0 z-50 bg-[#202124]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-[#202124]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-cinematic-backdrop-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-xl bg-[#202124] text-[#F2EEE7] border border-[#3A3C3E] p-6 sm:p-8 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-xl bg-[#202124] text-[#F2EEE7] border border-[#3A3C3E] p-6 sm:p-8 shadow-2xl overflow-hidden animate-cinematic-modal-in"
       >
         {/* Close Button */}
         <button

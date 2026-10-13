@@ -3,7 +3,7 @@ import { useStudio } from '../../context/StudioContext';
 import { ArrowRight, Play, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export const HeroSection: React.FC = () => {
-  const { heroSlides, isPreviewMode, settings, setIsQueryModalOpen, setQueryInitialTab } = useStudio();
+  const { heroSlides, isPreviewMode, settings, setIsQueryModalOpen, setQueryInitialTab, isHeroPreloaded } = useStudio();
 
   // Published slides or all slides in preview mode
   const slides = (isPreviewMode ? heroSlides : heroSlides.filter((s) => s.isPublished)).sort(
@@ -24,12 +24,12 @@ export const HeroSection: React.FC = () => {
     headline: 'Beautiful Interiors For Modern Living',
     supportingText:
       'We create functional and aesthetic spaces that reflect your personality and lifestyle. From concept to completion, with quality, durability and timely execution.',
-    primaryCtaText: 'View Projects',
-    primaryCtaLink: '#projects',
+    primaryCtaText: 'Explore Services',
+    primaryCtaLink: '#services',
     secondaryCtaText: 'Watch Our Video',
     secondaryCtaLink: '#about',
     imageUrl:
-      'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1800&q=85',
+      '/images/hero/contemporary-marble-kitchen.jpg',
     imageAlt: 'Luxury warm contemporary kitchen interior with marble island and bar stools',
     projectTag: 'Residential & Commercial | Turnkey Projects',
   };
@@ -102,7 +102,9 @@ export const HeroSection: React.FC = () => {
       aria-label="Conclave Interior Hero Showcase"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="relative w-full overflow-hidden bg-[#F2EEE7] text-[#202124] pt-28 lg:pt-36 pb-20 lg:pb-28 min-h-[88vh] flex items-center"
+      className={`relative w-full overflow-hidden bg-[#F2EEE7] text-[#202124] pb-20 lg:pb-28 min-h-[88vh] flex flex-col justify-center ${
+        isPreviewMode ? 'pt-36 sm:pt-40 lg:pt-44' : 'pt-28 sm:pt-32 lg:pt-36'
+      }`}
     >
       {/* ========================================================================= */}
       {/* 1. BACKGROUND: LARGE PREMIUM INTERIOR PHOTOGRAPHY WITH RESTING PARALLAX */}
@@ -113,7 +115,9 @@ export const HeroSection: React.FC = () => {
       >
         {/* Parallax Image Canvas with generous buffer to prevent edge-clipping */}
         <div
-          className="absolute -top-12 -left-6 -right-6 -bottom-16 transition-transform duration-100 ease-out will-change-transform"
+          className={`absolute -top-12 -left-6 -right-6 -bottom-16 transition-all duration-1000 ease-out will-change-transform ${
+            isHeroPreloaded ? 'opacity-100' : 'opacity-0'
+          }`}
           style={{
             transform: `translate3d(0, ${parallaxY}px, 0)`,
           }}
@@ -157,7 +161,9 @@ export const HeroSection: React.FC = () => {
           {/* Left Column: Editorial Headline, Subtitle, CTAs & Proof Bar */}
           <div className="lg:col-span-7 xl:col-span-7 space-y-7">
             {/* Eyebrow with Champagne Bronze line */}
-            <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-3 transition-all duration-700 ease-out delay-100 ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+            }`}>
               <span className="h-0.5 w-8 bg-[#B08D57]" />
               <span className="text-[11px] tracking-[0.25em] uppercase text-[#B08D57] font-bold font-mono">
                 {currentSlide.label || 'INTERIOR DESIGN & BUILD'}
@@ -165,7 +171,9 @@ export const HeroSection: React.FC = () => {
             </div>
 
             {/* High-Contrast Serif Headline: Beautiful Interiors For Modern Living */}
-            <h1 className="font-serif-title text-4xl sm:text-5xl md:text-6xl lg:text-[4.2rem] font-normal tracking-tight text-[#202124] leading-[1.06] text-balance">
+            <h1 className={`font-serif-title text-4xl sm:text-5xl md:text-6xl lg:text-[4.2rem] font-normal tracking-tight text-[#202124] leading-[1.06] text-balance transition-all duration-900 ease-out delay-200 ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'
+            }`}>
               {currentSlide.headline.includes('Modern Living') ? (
                 <>
                   Beautiful Interiors <br />
@@ -179,22 +187,28 @@ export const HeroSection: React.FC = () => {
             </h1>
 
             {/* Subtitle Tagline */}
-            <p className="text-xs sm:text-sm font-semibold tracking-wide text-[#2B2D2F] uppercase font-mono">
+            <p className={`text-xs sm:text-sm font-semibold tracking-wide text-[#2B2D2F] uppercase font-mono transition-all duration-700 ease-out delay-300 ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+            }`}>
               {currentSlide.projectTag || 'Residential & Commercial  |  Turnkey Projects'}
             </p>
 
             {/* Description */}
-            <p className="text-sm sm:text-base text-[#8C8276] font-light leading-relaxed max-w-xl">
+            <p className={`text-sm sm:text-base text-[#8C8276] font-light leading-relaxed max-w-xl transition-all duration-700 ease-out delay-400 ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+            }`}>
               {currentSlide.supportingText}
             </p>
 
             {/* Action Buttons: View Projects & Watch Our Video */}
-            <div className="pt-2 flex flex-wrap items-center gap-4">
+            <div className={`pt-2 flex flex-wrap items-center gap-4 transition-all duration-700 ease-out delay-500 ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+            }`}>
               <button
-                onClick={() => handleCtaClick(currentSlide.primaryCtaLink || '#projects')}
+                onClick={() => handleCtaClick(currentSlide.primaryCtaLink === '#projects' ? '#services' : (currentSlide.primaryCtaLink || '#services'))}
                 className="group inline-flex items-center gap-2.5 px-7 py-3.5 bg-[#202124] hover:bg-[#2B2D2F] text-[#F2EEE7] font-semibold text-xs rounded-full transition-all shadow-md active:scale-95 cursor-pointer"
               >
-                <span>{currentSlide.primaryCtaText || 'View Projects'}</span>
+                <span>{currentSlide.primaryCtaText === 'View Projects' ? 'Explore Services' : (currentSlide.primaryCtaText || 'Explore Services')}</span>
                 <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition-transform text-[#B08D57]" />
               </button>
 
@@ -210,22 +224,24 @@ export const HeroSection: React.FC = () => {
             </div>
 
             {/* Proof Bar: 3 Avatars + 250+ Happy Clients | 10+ Years Experience | 20+ Turnkey Projects */}
-            <div className="pt-6 border-t border-[#D6CBBE] flex flex-wrap items-center gap-6 sm:gap-8">
+            <div className={`pt-6 border-t border-[#D6CBBE] flex flex-wrap items-center gap-6 sm:gap-8 transition-all duration-700 ease-out delay-600 ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+            }`}>
               {/* Avatars + Clients */}
               <div className="flex items-center gap-3">
                 <div className="flex -space-x-2">
                   <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"
+                    src="/images/about/principal-designer.jpg"
                     alt="Client"
                     className="w-8 h-8 rounded-full border-2 border-[#F2EEE7] object-cover"
                   />
                   <img
-                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80"
+                    src="/images/testimonials/avatar-patron-01.jpg"
                     alt="Client"
                     className="w-8 h-8 rounded-full border-2 border-[#F2EEE7] object-cover"
                   />
                   <img
-                    src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80"
+                    src="/images/testimonials/avatar-patron-02.jpg"
                     alt="Client"
                     className="w-8 h-8 rounded-full border-2 border-[#F2EEE7] object-cover"
                   />
@@ -268,7 +284,9 @@ export const HeroSection: React.FC = () => {
 
           {/* Right Column: Architectural Monograph Showcase Frame with Slide Carousel Navigation */}
           <div
-            className="lg:col-span-5 xl:col-span-5 relative transition-transform duration-100 ease-out will-change-transform"
+            className={`lg:col-span-5 xl:col-span-5 relative transition-all duration-1000 ease-out delay-250 will-change-transform ${
+              isHeroPreloaded ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-6 scale-[0.98]'
+            }`}
             style={{
               transform: `translate3d(0, ${-parallaxY * 0.32}px, 0)`,
             }}
@@ -360,8 +378,8 @@ export const HeroSection: React.FC = () => {
 
       {/* Video Modal (Conclave Atelier Film) */}
       {isVideoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#202124]/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#202124] border border-[#2B2D2F] max-w-3xl w-full p-6 space-y-4 shadow-2xl relative rounded-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#202124]/85 backdrop-blur-md animate-cinematic-backdrop-in">
+          <div className="bg-[#202124] border border-[#2B2D2F] max-w-3xl w-full p-6 space-y-4 shadow-2xl relative rounded-2xl animate-cinematic-modal-in">
             <div className="flex items-center justify-between border-b border-[#2B2D2F] pb-3">
               <h3 className="font-serif-title text-sm tracking-wider text-[#F2EEE7]">
                 Conclave Interior Atelier Film

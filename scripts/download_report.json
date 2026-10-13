@@ -1,0 +1,202 @@
+[
+  {
+    "id": "travertine-monolith",
+    "category": "projects",
+    "filename": "monolithic-travertine-pavilion.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1600210492486-724fe5c67fb0",
+    "relativeWebPath": "/images/projects/monolithic-travertine-pavilion.jpg",
+    "sizeBytes": 539719,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "limewash-suite",
+    "category": "projects",
+    "filename": "limewash-plaster-suite.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1618219908412-a29a1bb7b86e",
+    "relativeWebPath": "/images/projects/limewash-plaster-suite.jpg",
+    "sizeBytes": 1243260,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "smoked-oak-library",
+    "category": "hero",
+    "filename": "smoked-oak-library.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1616486338812-3dadae4b4ace",
+    "relativeWebPath": "/images/hero/smoked-oak-library.jpg",
+    "sizeBytes": 350341,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "biophilic-courtyard",
+    "category": "services",
+    "filename": "biophilic-stone-courtyard.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1600566753376-12c8ab7fb75b",
+    "relativeWebPath": "/images/services/biophilic-stone-courtyard.jpg",
+    "sizeBytes": 378955,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "boardroom-sanctuary",
+    "category": "projects",
+    "filename": "executive-boardroom-sanctuary.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1497366216548-37526070297c",
+    "relativeWebPath": "/images/projects/executive-boardroom-sanctuary.jpg",
+    "sizeBytes": 303769,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "hearth-lounge",
+    "category": "testimonials",
+    "filename": "minimalist-hearth-lounge.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1600607687939-ce8a6c25118c",
+    "relativeWebPath": "/images/testimonials/minimalist-hearth-lounge.jpg",
+    "sizeBytes": 500581,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "marble-kitchen",
+    "category": "hero",
+    "filename": "contemporary-marble-kitchen.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1600585154340-be6161a56a0c",
+    "relativeWebPath": "/images/hero/contemporary-marble-kitchen.jpg",
+    "sizeBytes": 660294,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "bronze-bar",
+    "category": "projects",
+    "filename": "soiree-bronze-bar.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1590381105924-c72589b9ef3f?auto=format&fit=crop&w=2000&q=85",
+    "photoId": "1590381105924-c72589b9ef3f",
+    "relativeWebPath": "/images/projects/soiree-bronze-bar.jpg",
+    "sizeBytes": 634948,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "noir-atelier-loft",
+    "category": "hero",
+    "filename": "noir-atelier-loft.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=2200&q=85",
+    "photoId": "1618221195710-dd6b41faaea6",
+    "relativeWebPath": "/images/hero/noir-atelier-loft.jpg",
+    "sizeBytes": 558861,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "residential-joinery",
+    "category": "services",
+    "filename": "residential-design-joinery.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=85",
+    "photoId": "1556911220-e15b29be8c8f",
+    "relativeWebPath": "/images/services/residential-design-joinery.jpg",
+    "sizeBytes": 163890,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "stone-selection",
+    "category": "services",
+    "filename": "stone-material-selection.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=85",
+    "photoId": "1584622650111-993a426fbf0a",
+    "relativeWebPath": "/images/services/stone-material-selection.jpg",
+    "sizeBytes": 149860,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "joinery-prototype",
+    "category": "services",
+    "filename": "custom-joinery-prototyping.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=85",
+    "photoId": "1513694203232-719a280e022f",
+    "relativeWebPath": "/images/services/custom-joinery-prototyping.jpg",
+    "sizeBytes": 112960,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "limestone-detail",
+    "category": "services",
+    "filename": "fluted-limestone-detail.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1615066390971-03e4e1c36ddf?auto=format&fit=crop&w=1200&q=85",
+    "photoId": "1615066390971-03e4e1c36ddf",
+    "relativeWebPath": "/images/services/fluted-limestone-detail.jpg",
+    "sizeBytes": 350262,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "principal-designer",
+    "category": "about",
+    "filename": "principal-designer.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=85",
+    "photoId": "1534528741775-53994a69daeb",
+    "relativeWebPath": "/images/about/principal-designer.jpg",
+    "sizeBytes": 167762,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "studio-courtyard",
+    "category": "about",
+    "filename": "studio-courtyard-architecture.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=2400&q=85",
+    "photoId": "1600585154526-990dced4db0d",
+    "relativeWebPath": "/images/about/studio-courtyard-architecture.jpg",
+    "sizeBytes": 1707228,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "consultation-portal",
+    "category": "contact",
+    "filename": "atelier-consultation-portal.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1800&q=85",
+    "photoId": "1600566753190-17f0baa2a6c3",
+    "relativeWebPath": "/images/contact/atelier-consultation-portal.jpg",
+    "sizeBytes": 387459,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "avatar-patron-01",
+    "category": "testimonials",
+    "filename": "avatar-patron-01.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=85",
+    "photoId": "1507003211169-0a1dd7228f2d",
+    "relativeWebPath": "/images/testimonials/avatar-patron-01.jpg",
+    "sizeBytes": 32717,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "avatar-patron-02",
+    "category": "testimonials",
+    "filename": "avatar-patron-02.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=85",
+    "photoId": "1494790108377-be9c29b29330",
+    "relativeWebPath": "/images/testimonials/avatar-patron-02.jpg",
+    "sizeBytes": 32184,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "spatial-zen",
+    "category": "services",
+    "filename": "spatial-architecture-zen.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=2400&q=85",
+    "photoId": "1600607687920-4e2a09cf159d",
+    "relativeWebPath": "/images/services/spatial-architecture-zen.jpg",
+    "sizeBytes": 591586,
+    "status": "SUCCESS"
+  },
+  {
+    "id": "architectural-terrace",
+    "category": "projects",
+    "filename": "soiree-architectural-terrace.jpg",
+    "sourceUrl": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1600&q=85",
+    "photoId": "1512917774080-9991f1c4c750",
+    "relativeWebPath": "/images/projects/soiree-architectural-terrace.jpg",
+    "sizeBytes": 301452,
+    "status": "SUCCESS"
+  }
+]

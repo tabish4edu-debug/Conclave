@@ -41,7 +41,7 @@ export const HighlightsStrip: React.FC = () => {
     : defaultHighlights;
 
   return (
-    <div className="relative z-20 max-w-7xl mx-auto px-6 md:px-10 lg:px-12 -mt-6 sm:-mt-8 mb-16">
+    <div className="relative z-20 max-w-7xl mx-auto px-6 md:px-10 lg:px-12 mt-6 sm:mt-10 mb-16">
       <div className="bg-[#F2EEE7]/95 backdrop-blur-md border border-[#D6CBBE] rounded-2xl md:rounded-3xl p-6 sm:p-8 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
         {items.map((item, idx) => {
           const IconComponent = (item.iconName && iconMap[item.iconName]) ? iconMap[item.iconName] : Compass;

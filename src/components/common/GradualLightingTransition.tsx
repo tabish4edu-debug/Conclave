@@ -10,6 +10,8 @@ export interface GradualLightingTransitionProps {
   subtitle?: string;
   heightClass?: string;
   speed?: number;
+  titleClassName?: string;
+  subtitleClassName?: string;
 }
 
 /**
@@ -25,6 +27,8 @@ export const GradualLightingTransition: React.FC<GradualLightingTransitionProps>
   subtitle,
   heightClass = 'h-[60vh] sm:h-[72vh] md:h-[80vh]',
   speed = 0.24,
+  titleClassName,
+  subtitleClassName,
 }) => {
   const isLightToDark = variant === 'light-to-dark';
 
@@ -111,7 +115,7 @@ export const GradualLightingTransition: React.FC<GradualLightingTransitionProps>
 
         <h3
           className={`font-serif-title text-3xl sm:text-4xl md:text-5xl font-light tracking-tight leading-snug drop-shadow-sm ${
-            isLightToDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
+            titleClassName ? titleClassName : isLightToDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
           }`}
         >
           {title}
@@ -120,7 +124,7 @@ export const GradualLightingTransition: React.FC<GradualLightingTransitionProps>
         {subtitle && (
           <p
             className={`text-xs sm:text-sm font-light tracking-wide max-w-xl mx-auto leading-relaxed ${
-              isLightToDark ? 'text-[#D6CBBE]/85' : 'text-[#202124]/80'
+              subtitleClassName ? subtitleClassName : isLightToDark ? 'text-[#D6CBBE]/85' : 'text-[#202124]/80'
             }`}
           >
             {subtitle}

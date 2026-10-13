@@ -180,7 +180,7 @@ ${formData.message.trim()}
         }}
       >
         <img
-          src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1800&q=80"
+          src="/images/contact/atelier-consultation-portal.jpg"
           alt="Atelier drafting table backdrop"
           loading="lazy"
           className="w-full h-full object-cover object-center filter grayscale"

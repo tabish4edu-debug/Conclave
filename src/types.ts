@@ -198,4 +198,14 @@ export interface PublicationRecord {
 export interface PublicationStatus {
   count: number;
   summary: { type: string; title: string; action: string }[];
+  totalUnpublishedItems?: number;
+  unpublishedSummary?: {
+    projects: number;
+    heroSlides: number;
+    stripItems: number;
+    services: number;
+    faqs: number;
+    about: boolean;
+    settings: boolean;
+  };
 }

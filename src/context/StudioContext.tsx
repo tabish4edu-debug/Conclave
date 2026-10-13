@@ -49,6 +49,10 @@ interface StudioContextType {
   isFeedbackModalOpen: boolean;
   setIsFeedbackModalOpen: (open: boolean) => void;
 
+  // Architectural Photography Preloader
+  isHeroPreloaded: boolean;
+  setIsHeroPreloaded: (preloaded: boolean) => void;
+
   // Admin Auth & User (PostgreSQL Session Auth)
   isAdminLoggedIn: boolean;
   currentUser: { email?: string | null; displayName?: string | null; photoURL?: string | null; role?: string } | null;
@@ -153,6 +157,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isQueryModalOpen, setIsQueryModalOpen] = useState<boolean>(false);
   const [queryInitialTab, setQueryInitialTab] = useState<'whatsapp' | 'call' | 'enquiry'>('enquiry');
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false);
+  const [isHeroPreloaded, setIsHeroPreloaded] = useState<boolean>(false);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
@@ -254,13 +259,17 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     role?: string;
   } | null>(null);
 
-  // Sync activePage with URL hash (e.g. #admin or #)
+  // Sync activePage with URL hash (e.g. #admin, #about, #services, #projects, etc.)
   useEffect(() => {
     const handleHash = () => {
-      const hash = window.location.hash.toLowerCase();
-      if (hash === '#admin' || hash === '#/admin') {
+      const raw = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
+      if (raw === 'admin') {
         setActivePage('admin');
-      } else if (activePage === 'admin') {
+      } else if (
+        ['home', 'about', 'services', 'projects', 'approach', 'contact', 'testimonials', 'faq'].includes(raw)
+      ) {
+        setActivePage(raw);
+      } else if (!raw && activePage === 'admin') {
         setActivePage('home');
       }
     };
@@ -822,8 +831,8 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setEnquiries((prev) => [tempEnquiry, ...prev]);
     try {
       const res = await api.submitEnquiry(enquiry);
-      if (res.item) {
-        setEnquiries((prev) => prev.map((e) => (e.id === tempEnquiry.id ? res.item : e)));
+      if (res.id) {
+        setEnquiries((prev) => prev.map((e) => (e.id === tempEnquiry.id ? { ...e, id: res.id! } : e)));
       }
       return { success: true, message: res.message || 'Enquiry received' };
     } catch (err: any) {
@@ -945,6 +954,8 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setQueryInitialTab,
         isFeedbackModalOpen,
         setIsFeedbackModalOpen,
+        isHeroPreloaded,
+        setIsHeroPreloaded,
         isAdminLoggedIn,
         currentUser,
         authLoading,

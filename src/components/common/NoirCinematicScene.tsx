@@ -33,7 +33,7 @@ export const NoirCinematicScene: React.FC = () => {
         }}
       >
         <img
-          src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=2200&q=85"
+          src="/images/hero/noir-atelier-loft.jpg"
           alt="Atmospheric double-height loft with blackened steel and warm stone neutrals"
           loading="lazy"
           className="w-full h-full object-cover object-center filter grayscale-[15%] contrast-[1.18] brightness-[0.78]"

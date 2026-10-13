@@ -38,7 +38,7 @@ export const StudioStorySection: React.FC = () => {
     projects[1]?.coverImage ||
     stripItems[0]?.imageUrl ||
     projects[0]?.coverImage ||
-    'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1600&q=85';
+    '/images/projects/monolithic-travertine-pavilion.jpg';
 
   return (
     <section
@@ -56,7 +56,7 @@ export const StudioStorySection: React.FC = () => {
         }}
       >
         <img
-          src="https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=2400&q=85"
+          src="/images/about/studio-courtyard-architecture.jpg"
           alt="Architectural interior volume with double-height timber ceilings and natural light"
           className="w-full h-full object-cover object-center opacity-65 filter contrast-[1.08] brightness-[0.98]"
         />

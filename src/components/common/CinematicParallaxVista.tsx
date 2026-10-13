@@ -173,10 +173,10 @@ export const CinematicParallaxVista: React.FC<CinematicParallaxVistaProps> = ({
         </p>
 
         {/* Material Specification Badge & Action */}
-        <div className="pt-2 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 pointer-events-auto">
+        <div className="pt-2 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3 sm:gap-6 pointer-events-auto max-w-full">
           {materialSpecification && (
             <div
-              className={`px-4 py-1.5 border text-[10px] tracking-[0.2em] uppercase font-mono backdrop-blur-sm ${
+              className={`px-4 py-1.5 border text-[10px] tracking-[0.2em] uppercase font-mono backdrop-blur-sm max-w-full text-center leading-relaxed break-normal ${
                 specClassName
                   ? specClassName
                   : isDark
@@ -191,7 +191,7 @@ export const CinematicParallaxVista: React.FC<CinematicParallaxVistaProps> = ({
           {showExploreLink && (
             <a
               href={exploreHref}
-              className={`inline-flex items-center gap-2 text-xs uppercase tracking-widest font-semibold transition-colors duration-300 group py-1 border-b ${
+              className={`inline-flex items-center gap-2 text-xs uppercase tracking-widest font-semibold transition-colors duration-300 group py-1 border-b shrink-0 whitespace-nowrap ${
                 exploreLinkClassName
                   ? exploreLinkClassName
                   : isDark

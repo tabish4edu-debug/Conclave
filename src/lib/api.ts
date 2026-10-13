@@ -15,6 +15,7 @@ import {
 
 // In-memory token fallback if needed, never stored in browser storage
 let inMemoryAuthToken: string | null = null;
+let inMemoryCsrfToken: string | null = null;
 
 export function setApiAuthToken(token: string | null) {
   inMemoryAuthToken = token;
@@ -24,10 +25,20 @@ export function getApiAuthToken(): string | null {
   return inMemoryAuthToken;
 }
 
+export function setApiCsrfToken(token: string | null) {
+  inMemoryCsrfToken = token;
+}
+
 function getCsrfTokenFromCookie(): string | null {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(/(?:^|;\s*)conclave_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getCsrfToken(): string | null {
+  const fromCookie = getCsrfTokenFromCookie();
+  if (fromCookie) return fromCookie;
+  return inMemoryCsrfToken;
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -39,7 +50,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
   headers.set('X-Requested-With', 'XMLHttpRequest');
 
-  const csrfToken = getCsrfTokenFromCookie();
+  const csrfToken = getCsrfToken();
   if (csrfToken && !headers.has('X-CSRF-Token')) {
     headers.set('X-CSRF-Token', csrfToken);
   }
@@ -285,7 +296,7 @@ export const api = {
     budget?: string;
     preferredContact: 'phone' | 'whatsapp' | 'email';
     message: string;
-  }): Promise<{ success: boolean; message: string; item: EnquiryItem }> {
+  }): Promise<{ success: boolean; message: string; id?: string }> {
     return request('/api/enquiries', {
       method: 'POST',
       body: JSON.stringify(data),

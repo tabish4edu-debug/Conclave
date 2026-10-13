@@ -32,7 +32,7 @@ export const TestimonialsSection: React.FC = () => {
         }}
       >
         <img
-          src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=2000&q=80"
+          src="/images/hero/noir-atelier-loft.jpg"
           alt="Atmospheric architectural atelier backdrop"
           loading="lazy"
           className="w-full h-full object-cover object-center filter grayscale contrast-125"

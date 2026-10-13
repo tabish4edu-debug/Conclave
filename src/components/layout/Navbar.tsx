@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStudio } from '../../context/StudioContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Menu, X, ArrowUpRight, Phone, MessageSquare } from 'lucide-react';
+import { Menu, X, ArrowUpRight, Phone, MessageSquare, Eye } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const {
@@ -10,6 +10,8 @@ export const Navbar: React.FC = () => {
     setActivePage,
     setIsQueryModalOpen,
     setQueryInitialTab,
+    isPreviewMode,
+    togglePreviewMode,
   } = useStudio();
   const { isDark } = useTheme();
 
@@ -25,7 +27,7 @@ export const Navbar: React.FC = () => {
         setIsScrolled(false);
       }
 
-      const sections = ['home', 'about', 'services', 'projects', 'testimonials', 'contact'];
+      const sections = ['home', 'services', 'testimonials', 'contact'];
       for (const sectionId of [...sections].reverse()) {
         const el = document.getElementById(sectionId === 'home' ? 'hero-cinematic' : sectionId);
         if (el) {
@@ -43,18 +45,18 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { label: 'Home', href: '#top', section: 'home' },
-    { label: 'About', href: '#about', section: 'about' },
     { label: 'Services', href: '#services', section: 'services' },
-    { label: 'Projects', href: '#projects', section: 'projects' },
-    { label: 'Approach', href: '#approach', section: 'approach' },
+    { label: 'Testimonials', href: '#testimonials', section: 'testimonials' },
     { label: 'Contact', href: '#contact', section: 'contact' },
   ];
 
   const handleNavClick = (href: string, section: string) => {
     setMobileMenuOpen(false);
     setActiveSection(section);
-    if (activePage !== 'home') {
-      setActivePage('home');
+    const wasAdmin = activePage === 'admin';
+    setActivePage(section);
+
+    if (wasAdmin) {
       setTimeout(() => {
         if (href === '#top') {
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -62,7 +64,7 @@ export const Navbar: React.FC = () => {
           const el = document.querySelector(href);
           if (el) el.scrollIntoView({ behavior: 'smooth' });
         }
-      }, 100);
+      }, 200);
     } else {
       if (href === '#top') {
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -92,117 +94,142 @@ export const Navbar: React.FC = () => {
     <>
       <header
         id="conclave-main-header"
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-700 ease-in-out ${
-          isScrolled
-            ? isDark
-              ? 'bg-[#202124]/92 backdrop-blur-md py-3.5 border-b border-[#3A3C3E] shadow-lg text-[#F2EEE7]'
-              : 'bg-[#F2EEE7]/95 backdrop-blur-md py-3.5 border-b border-[#D6CBBE] shadow-xs text-[#202124]'
-            : isDark
-            ? 'bg-transparent py-5 text-[#F2EEE7]'
-            : 'bg-transparent py-5 text-[#202124]'
-        }`}
+        className="fixed top-0 left-0 right-0 z-50 transition-all duration-700 ease-in-out"
       >
-        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-12 flex items-center justify-between">
-          {/* Brand Logo matching layout: Square with "C" + CONCLAVE / — INTERIOR — */}
-          <a
-            id="brand-logo-link"
-            href="#top"
-            onClick={(e) => {
-              e.preventDefault();
-              handleNavClick('#top', 'home');
-            }}
-            className="group flex items-center gap-3 text-left focus:outline-hidden"
-          >
-            <div className={`w-9 h-9 border flex items-center justify-center rounded-xs shadow-xs transition-all duration-500 group-hover:scale-105 ${
-              isDark ? 'border-[#3A3C3E] bg-[#2B2D2F]' : 'border-[#2B2D2F] bg-[#202124]'
-            }`}>
-              <span className="font-serif-title text-base font-semibold text-[#F2EEE7]">
-                C
+        {/* Draft Preview Bar docked seamlessly at top of fixed header to eliminate overlapping */}
+        {isPreviewMode && (
+          <div className="bg-[#B08D57] text-[#202124] px-4 py-1.5 sm:py-2 text-xs font-mono flex items-center justify-between shadow-md border-b border-[#9A7844]">
+            <div className="flex items-center gap-2">
+              <Eye className="w-3.5 h-3.5 text-[#202124]" />
+              <span className="font-semibold uppercase tracking-wider text-[11px] sm:text-xs">
+                DRAFT PREVIEW ACTIVE
+              </span>
+              <span className="hidden md:inline text-black/70 text-[11px]">
+                — Displaying unpublished drafts & pending portfolio monographs.
               </span>
             </div>
-            <div>
-              <span className={`block font-serif-title text-lg md:text-xl tracking-[0.16em] uppercase font-bold leading-none transition-colors duration-700 ${
-                isDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
-              }`}>
-                CONCLAVE
-              </span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="h-px w-2 bg-[#B08D57]" />
-                <span className="text-[8px] tracking-[0.25em] uppercase text-[#B08D57] font-semibold leading-none">
-                  INTERIOR
-                </span>
-                <span className="h-px w-2 bg-[#B08D57]" />
-              </div>
-            </div>
-          </a>
-
-          {/* Desktop Navigation Links */}
-          <nav
-            id="desktop-navigation"
-            aria-label="Main Navigation"
-            className="hidden lg:flex items-center gap-7 xl:gap-8 text-xs tracking-wider font-medium"
-          >
-            {navLinks.map((link) => {
-              const isActive = activeSection === link.section;
-              return (
-                <a
-                  key={link.label}
-                  href={link.href}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleNavClick(link.href, link.section);
-                  }}
-                  className={`relative py-1 transition-colors duration-500 group ${
-                    isActive
-                      ? isDark ? 'text-[#F2EEE7] font-semibold' : 'text-[#202124] font-semibold'
-                      : isDark ? 'text-[#D6CBBE] hover:text-[#B08D57]' : 'text-[#2B2D2F] hover:text-[#B08D57]'
-                  }`}
-                >
-                  {link.label}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#B08D57] rounded-full transition-all" />
-                  )}
-                </a>
-              );
-            })}
-          </nav>
-
-          {/* Right Action Cluster: Phone & "Get a Quote →" */}
-          <div className="flex items-center gap-4 md:gap-6">
-            {/* Phone Number with Phone Icon */}
-            <a
-              href={`tel:${phoneNumber.replace(/\s+/g, '')}`}
-              className={`hidden sm:inline-flex items-center gap-2 text-xs font-semibold transition-colors duration-500 py-1.5 font-sans ${
-                isDark ? 'text-[#F2EEE7] hover:text-[#B08D57]' : 'text-[#202124] hover:text-[#B08D57]'
-              }`}
-              title="Call Conclave Interior"
+            <button
+              onClick={togglePreviewMode}
+              className="px-2.5 py-0.5 sm:py-1 bg-[#202124] text-[#F2EEE7] hover:bg-[#2B2D2F] text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold cursor-pointer transition-colors"
             >
-              <Phone className={`w-3.5 h-3.5 transition-colors duration-500 ${isDark ? 'text-[#B08D57]' : 'text-[#202124]'}`} />
-              <span className="tracking-wide">{phoneNumber}</span>
+              Exit Preview
+            </button>
+          </div>
+        )}
+
+        <div
+          className={`transition-all duration-500 ease-in-out ${
+            isScrolled
+              ? isDark
+                ? 'bg-[#202124]/92 backdrop-blur-md py-3.5 border-b border-[#3A3C3E] shadow-lg text-[#F2EEE7]'
+                : 'bg-[#F2EEE7]/95 backdrop-blur-md py-3.5 border-b border-[#D6CBBE] shadow-xs text-[#202124]'
+              : isDark
+              ? 'bg-[#202124]/20 backdrop-blur-[2px] py-4 sm:py-5 text-[#F2EEE7]'
+              : 'bg-[#F2EEE7]/30 backdrop-blur-[2px] py-4 sm:py-5 text-[#202124]'
+          }`}
+        >
+          <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-12 flex items-center justify-between">
+            {/* Brand Logo matching layout: Square with "C" + CONCLAVE / — INTERIOR — */}
+            <a
+              id="brand-logo-link"
+              href="#top"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavClick('#top', 'home');
+              }}
+              className="group flex items-center gap-3 text-left focus:outline-hidden shrink-0"
+            >
+              <div className={`w-9 h-9 border flex items-center justify-center rounded-xs shadow-xs transition-all duration-500 group-hover:scale-105 ${
+                isDark ? 'border-[#3A3C3E] bg-[#2B2D2F]' : 'border-[#2B2D2F] bg-[#202124]'
+              }`}>
+                <span className="font-serif-title text-base font-semibold text-[#F2EEE7]">
+                  C
+                </span>
+              </div>
+              <div>
+                <span className={`block font-serif-title text-lg md:text-xl tracking-[0.16em] uppercase font-bold leading-none transition-colors duration-700 ${
+                  isDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
+                }`}>
+                  CONCLAVE
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="h-px w-2 bg-[#B08D57]" />
+                  <span className="text-[8px] tracking-[0.25em] uppercase text-[#B08D57] font-semibold leading-none">
+                    INTERIOR
+                  </span>
+                  <span className="h-px w-2 bg-[#B08D57]" />
+                </div>
+              </div>
             </a>
 
-            {/* Get a Quote Button in Rounded Champagne Bronze Pill */}
-            <button
-              id="header-quote-cta-btn"
-              onClick={handleQuoteClick}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#B08D57] hover:bg-[#9A7844] text-[#202124] font-semibold text-xs rounded-full shadow-sm transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+            {/* Desktop Navigation Links with responsive gap */}
+            <nav
+              id="desktop-navigation"
+              aria-label="Main Navigation"
+              className="hidden lg:flex items-center gap-4 xl:gap-8 text-xs tracking-wider font-medium"
             >
-              <span>{quoteText}</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
+              {navLinks.map((link) => {
+                const isActive = activeSection === link.section;
+                return (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleNavClick(link.href, link.section);
+                    }}
+                    className={`relative py-1 transition-colors duration-500 group ${
+                      isActive
+                        ? isDark ? 'text-[#F2EEE7] font-semibold' : 'text-[#202124] font-semibold'
+                        : isDark ? 'text-[#D6CBBE] hover:text-[#B08D57]' : 'text-[#2B2D2F] hover:text-[#B08D57]'
+                    }`}
+                  >
+                    {link.label}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#B08D57] rounded-full transition-all" />
+                    )}
+                  </a>
+                );
+              })}
+            </nav>
 
-            {/* Mobile Hamburger Toggle */}
-            <button
-              id="mobile-menu-toggle-btn"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`lg:hidden p-2 transition-colors duration-500 hover:text-[#B08D57] focus:outline-hidden ${
-                isDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
-              }`}
-              aria-label="Toggle navigation menu"
-              aria-expanded={mobileMenuOpen}
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+            {/* Right Action Cluster: Phone & "Get a Quote →" */}
+            <div className="flex items-center gap-3 sm:gap-4 md:gap-6 shrink-0">
+              {/* Phone Number with Phone Icon */}
+              <a
+                href={`tel:${phoneNumber.replace(/\s+/g, '')}`}
+                className={`hidden xl:inline-flex items-center gap-2 text-xs font-semibold transition-colors duration-500 py-1.5 font-sans ${
+                  isDark ? 'text-[#F2EEE7] hover:text-[#B08D57]' : 'text-[#202124] hover:text-[#B08D57]'
+                }`}
+                title="Call Conclave Interior"
+              >
+                <Phone className={`w-3.5 h-3.5 transition-colors duration-500 ${isDark ? 'text-[#B08D57]' : 'text-[#202124]'}`} />
+                <span className="tracking-wide">{phoneNumber}</span>
+              </a>
+
+              {/* Get a Quote Button in Rounded Champagne Bronze Pill */}
+              <button
+                id="header-quote-cta-btn"
+                onClick={handleQuoteClick}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#B08D57] hover:bg-[#9A7844] text-[#202124] font-semibold text-xs rounded-full shadow-sm transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              >
+                <span>{quoteText}</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Mobile Hamburger Toggle */}
+              <button
+                id="mobile-menu-toggle-btn"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className={`lg:hidden p-2 transition-colors duration-500 hover:text-[#B08D57] focus:outline-hidden ${
+                  isDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
+                }`}
+                aria-label="Toggle navigation menu"
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              </button>
+            </div>
           </div>
         </div>
       </header>
