@@ -460,7 +460,7 @@ async function startServer() {
       }
 
       // Check configured administrator email
-      const authorizedEmail = (process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com').trim().toLowerCase();
+      const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
       if (!process.env.ADMIN_EMAIL) {
         console.warn('[AUTH] ADMIN_EMAIL not set in environment. Falling back to default administrator: ' + authorizedEmail);
       }
@@ -556,7 +556,7 @@ async function startServer() {
         return res.json({ authenticated: false, user: null });
       }
 
-      const authorizedEmail = (process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com').trim().toLowerCase();
+      const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
       if (verified.user.email.toLowerCase() !== authorizedEmail || verified.user.role !== 'admin') {
         res.clearCookie('conclave_session', { path: '/' });
         return res.json({ authenticated: false, user: null });
@@ -655,7 +655,7 @@ async function startServer() {
       const note = req.body.notes ? sanitizeText(req.body.notes) : undefined;
       const result = await publishBatch(
         user.displayName || 'Studio Administrator',
-        user.email || process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com',
+        user.email || process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com',
         note
       );
       res.json(result);

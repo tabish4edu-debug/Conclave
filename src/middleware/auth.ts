@@ -339,12 +339,9 @@ export const requireAuth = async (
     const { user } = verified;
 
     // Designated single administrator email check
-    const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-    if (!authorizedEmail) {
-      console.error('Server configuration error: ADMIN_EMAIL environment variable is not configured.');
-      return res.status(500).json({
-        error: 'Authentication configuration error: Administrator email is not configured on the server.',
-      });
+    const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
+    if (!process.env.ADMIN_EMAIL) {
+      console.warn('[AUTH] ADMIN_EMAIL not configured in environment, defaulting to ' + authorizedEmail);
     }
 
     const userEmail = (user.email || '').toLowerCase();
@@ -379,7 +376,7 @@ export const requireAuth = async (
  * Fails closed (returns false) if ADMIN_EMAIL is not configured.
  */
 export async function isAuthenticatedAdmin(req: Request): Promise<boolean> {
-  const authorizedEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
   if (!authorizedEmail) {
     return false;
   }

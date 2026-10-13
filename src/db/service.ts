@@ -46,12 +46,27 @@ export async function findUserById(id: number) {
 }
 
 export async function initAdminAccount() {
-  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com').trim().toLowerCase();
+  const adminEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
   if (!process.env.ADMIN_EMAIL) {
     console.info('[AUTH] ADMIN_EMAIL not set in environment. Using default administrator: ' + adminEmail);
   }
 
-  const existing = await findUserByEmail(adminEmail);
+  let existing = await findUserByEmail(adminEmail);
+
+  // If the admin user with this email does not exist yet, check if an existing admin record is present
+  // and migrate its email so the configured passwordHash is preserved
+  if (!existing) {
+    const legacyAdmins = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
+    if (legacyAdmins.length > 0) {
+      await db
+        .update(users)
+        .set({ email: adminEmail, updatedAt: new Date() })
+        .where(eq(users.id, legacyAdmins[0].id));
+      console.log(`[AUTH] Updated administrator account (ID: ${legacyAdmins[0].id}) email to ${adminEmail}.`);
+      existing = await findUserByEmail(adminEmail);
+    }
+  }
+
   const initialPassword = process.env.ADMIN_INITIAL_PASSWORD?.trim();
 
   // Helper to validate production initial password strength
@@ -980,7 +995,7 @@ export async function publishBatch(publishedBy: string, email: string, note?: st
     const historyEntry = await db.insert(publicationHistory).values({
       batchId,
       publishedBy: publishedBy || 'Studio Administrator',
-      publishedByEmail: email || process.env.ADMIN_EMAIL || 'admin@conclaveinteriors.com',
+      publishedByEmail: email || process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com',
       itemsCount: count,
       summary: summary,
       notes: note || `Published batch containing ${count} atelier update(s).`,

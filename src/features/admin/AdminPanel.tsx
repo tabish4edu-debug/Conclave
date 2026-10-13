@@ -277,7 +277,7 @@ export const AdminPanel: React.FC = () => {
                 required
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="admin@conclaveinteriors.com"
+                placeholder="conclaveinteriorexterior@gmail.com"
                 className="w-full bg-[#202124] border border-[#3A3C3E] px-3.5 py-2.5 text-xs text-[#F2EEE7] focus:outline-none focus:border-[#B08D57] transition-colors font-mono placeholder:text-[#D8CFC1]/30"
               />
             </div>
