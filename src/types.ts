@@ -11,6 +11,7 @@ export interface Project {
   materialsPalette: string[];
   coverImage: string;
   galleryImages: { url: string; alt: string; caption?: string }[];
+  videoUrl?: string;
   isFeatured: boolean;
   status: 'published' | 'draft';
   sortOrder: number;

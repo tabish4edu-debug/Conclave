@@ -27,9 +27,11 @@ export const Navbar: React.FC = () => {
         setIsScrolled(false);
       }
 
-      const sections = ['home', 'testimonials', 'contact'];
+      const sections = ['home', 'about', 'projects', 'testimonials', 'contact'];
       for (const sectionId of [...sections].reverse()) {
-        const el = document.getElementById(sectionId === 'home' ? 'hero-cinematic' : sectionId);
+        const el = document.getElementById(
+          sectionId === 'home' ? 'hero-cinematic' : sectionId === 'projects' ? 'our-works' : sectionId
+        ) || document.getElementById(sectionId);
         if (el) {
           const rect = el.getBoundingClientRect();
           if (rect.top <= 180) {
@@ -45,6 +47,8 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { label: 'Home', href: '#top', section: 'home' },
+    { label: 'About', href: '#about', section: 'about' },
+    { label: 'Our Works', href: '#our-works', section: 'projects' },
     { label: 'Testimonials', href: '#testimonials', section: 'testimonials' },
     { label: 'Contact', href: '#contact', section: 'contact' },
   ];

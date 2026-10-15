@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useStudio } from '../../context/StudioContext';
 import { Project } from '../../types';
-import { X, MapPin, Calendar, Maximize, ArrowUpRight, Layers } from 'lucide-react';
-import { PlaceholderBadge } from '../../components/common/PlaceholderBadge';
+import { X, MapPin, Calendar, Maximize, ArrowUpRight, Layers, Play } from 'lucide-react';
+import { ProjectVideoModal } from './ProjectVideoModal';
 
 interface ProjectDetailModalProps {
   project: Project;
@@ -13,6 +13,7 @@ interface ProjectDetailModalProps {
 export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClose }) => {
   const { setIsQueryModalOpen, setQueryInitialTab } = useStudio();
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+  const [showVideo, setShowVideo] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -131,7 +132,6 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project,
               >
                 {project.title}
               </h2>
-              <PlaceholderBadge label="Case Ref" variant="subtle" />
             </div>
 
             <p className="text-xs sm:text-[13px] text-[#D6CBBE] font-light leading-relaxed line-clamp-3">
@@ -195,14 +195,27 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project,
           </div>
 
           {/* Studio Actions Bar */}
-          <div className="pt-3 border-t border-[#3A3C3E] flex items-center justify-between gap-3">
-            <button
-              onClick={onClose}
-              type="button"
-              className="px-3.5 py-2 border border-[#3A3C3E] hover:border-[#B08D57] text-[#D6CBBE] text-xs uppercase tracking-wider transition-colors cursor-pointer"
-            >
-              Close
-            </button>
+          <div className="pt-3 border-t border-[#3A3C3E] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                type="button"
+                className="px-3.5 py-2 border border-[#3A3C3E] hover:border-[#B08D57] text-[#D6CBBE] text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+
+              {project.videoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setShowVideo(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-[#B08D57] bg-[#B08D57]/15 hover:bg-[#B08D57] text-[#B08D57] hover:text-[#202124] text-xs font-mono uppercase tracking-wider transition-all cursor-pointer font-semibold"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Watch Walkthrough Film</span>
+                </button>
+              )}
+            </div>
 
             <button
               onClick={handleConsultClick}
@@ -215,6 +228,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project,
           </div>
         </div>
       </div>
+
+      {showVideo && (
+        <ProjectVideoModal
+          project={project}
+          onClose={() => setShowVideo(false)}
+        />
+      )}
     </div>
   );
 

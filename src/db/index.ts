@@ -19,6 +19,8 @@ export const createPool = () => {
         ssl: isSsl ? { rejectUnauthorized: false } : undefined,
         max: 10,
         connectionTimeoutMillis: 15000,
+        idleTimeoutMillis: 30000,
+        statement_timeout: 10000,
       });
     } else {
       global._postgresPool = new Pool({
@@ -28,6 +30,8 @@ export const createPool = () => {
         database: process.env.SQL_DB_NAME,
         max: 10,
         connectionTimeoutMillis: 15000,
+        idleTimeoutMillis: 30000,
+        statement_timeout: 10000,
       });
     }
 
@@ -40,7 +44,15 @@ export const createPool = () => {
 };
 
 // Create or retrieve the pool instance lazily without startup connection probes
-const pool = createPool();
+export const pool = createPool();
+
+// Export closePool helper for graceful process termination
+export const closePool = async () => {
+  if (global._postgresPool) {
+    await global._postgresPool.end();
+    global._postgresPool = undefined;
+  }
+};
 
 // Initialize Drizzle with the pool and schema
 export const db = drizzle(pool, { schema });

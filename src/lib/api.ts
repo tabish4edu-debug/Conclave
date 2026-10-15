@@ -181,6 +181,37 @@ export const api = {
     });
   },
 
+  // Restricted Admin: Photo & Video Operations
+  async addProjectPhoto(id: string, data: { url: string; alt?: string; caption?: string; setAsCover?: boolean }): Promise<{ success: boolean; project: Project }> {
+    return request(`/api/admin/projects/${id}/photos`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  async setProjectCoverPhoto(id: string, url: string): Promise<{ success: boolean; project: Project }> {
+    return request(`/api/admin/projects/${id}/cover`, {
+      method: 'PUT',
+      body: JSON.stringify({ url }),
+    });
+  },
+  async deleteProjectPhoto(id: string, url: string): Promise<{ success: boolean; project: Project }> {
+    return request(`/api/admin/projects/${id}/photos`, {
+      method: 'DELETE',
+      body: JSON.stringify({ url }),
+    });
+  },
+  async attachProjectVideo(id: string, videoUrl: string): Promise<{ success: boolean; project: Project }> {
+    return request(`/api/admin/projects/${id}/video`, {
+      method: 'POST',
+      body: JSON.stringify({ videoUrl }),
+    });
+  },
+  async deleteProjectVideo(id: string): Promise<{ success: boolean; project: Project }> {
+    return request(`/api/admin/projects/${id}/video`, {
+      method: 'DELETE',
+    });
+  },
+
   // Hero Slides
   async getHeroSlides(includeDrafts = false): Promise<HeroSlide[]> {
     return request<HeroSlide[]>(`/api/hero-slides${includeDrafts ? '?drafts=true' : ''}`);

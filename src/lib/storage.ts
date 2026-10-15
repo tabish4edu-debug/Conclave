@@ -40,6 +40,36 @@ export interface StorageProvider {
  * across container recycles, scale-to-zero events, or redeployments, with zero
  * dependency on ephemeral container filesystems.
  */
+interface CachedMedia {
+  buffer: Buffer;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
+  expiresAt: number;
+}
+
+const mediaCache = new Map<string, CachedMedia>();
+let currentCacheBytes = 0;
+const MAX_CACHE_BYTES = 50 * 1024 * 1024; // 50MB bounded cache
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes TTL for active streaming/viewing
+
+function pruneMediaCache(neededBytes: number) {
+  const now = Date.now();
+  // First pass: purge expired
+  for (const [key, item] of mediaCache.entries()) {
+    if (now > item.expiresAt) {
+      currentCacheBytes -= item.sizeBytes;
+      mediaCache.delete(key);
+    }
+  }
+  // Second pass: if still too large, purge oldest entries
+  for (const [key, item] of mediaCache.entries()) {
+    if (currentCacheBytes + neededBytes <= MAX_CACHE_BYTES) break;
+    currentCacheBytes -= item.sizeBytes;
+    mediaCache.delete(key);
+  }
+}
+
 class DatabaseStorageProvider implements StorageProvider {
   async upload(file: {
     buffer: Buffer;
@@ -76,6 +106,21 @@ class DatabaseStorageProvider implements StorageProvider {
       createdAt: new Date(),
     });
 
+    // Warm cache for immediate preview/playback
+    if (file.size <= 25 * 1024 * 1024) {
+      pruneMediaCache(file.size);
+      if (currentCacheBytes + file.size <= MAX_CACHE_BYTES) {
+        mediaCache.set(id, {
+          buffer: file.buffer,
+          mimeType: file.mimeType,
+          fileName,
+          sizeBytes: file.size,
+          expiresAt: Date.now() + CACHE_TTL_MS,
+        });
+        currentCacheBytes += file.size;
+      }
+    }
+
     return {
       id,
       url,
@@ -89,6 +134,22 @@ class DatabaseStorageProvider implements StorageProvider {
     mimeType: string;
     fileName: string;
   } | null> {
+    // 1. Strict ID format validation: prevents malformed IDs from hitting DB
+    if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+      return null;
+    }
+
+    // 2. Check active in-memory cache (eliminates repeated DB queries on video seeking)
+    const cached = mediaCache.get(id);
+    if (cached && Date.now() <= cached.expiresAt) {
+      return {
+        buffer: cached.buffer,
+        mimeType: cached.mimeType,
+        fileName: cached.fileName,
+      };
+    }
+
+    // 3. Fallback to PostgreSQL
     const rows = await db
       .select()
       .from(mediaBlobs)
@@ -99,6 +160,26 @@ class DatabaseStorageProvider implements StorageProvider {
 
     const row = rows[0];
     const buffer = Buffer.from(row.dataBase64, 'base64');
+
+    // 4. Cache in memory for subsequent chunks/seeks if under size threshold
+    if (buffer.length <= 25 * 1024 * 1024) {
+      pruneMediaCache(buffer.length);
+      if (currentCacheBytes + buffer.length <= MAX_CACHE_BYTES) {
+        const existing = mediaCache.get(id);
+        if (existing) {
+          currentCacheBytes -= existing.sizeBytes;
+        }
+        mediaCache.set(id, {
+          buffer,
+          mimeType: row.mimeType,
+          fileName: row.fileName,
+          sizeBytes: buffer.length,
+          expiresAt: Date.now() + CACHE_TTL_MS,
+        });
+        currentCacheBytes += buffer.length;
+      }
+    }
+
     return {
       buffer,
       mimeType: row.mimeType,
@@ -107,6 +188,17 @@ class DatabaseStorageProvider implements StorageProvider {
   }
 
   async deleteMedia(id: string): Promise<boolean> {
+    if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+      return false;
+    }
+
+    // Evict from active cache
+    const cached = mediaCache.get(id);
+    if (cached) {
+      currentCacheBytes -= cached.sizeBytes;
+      mediaCache.delete(id);
+    }
+
     const deleted = await db
       .delete(mediaBlobs)
       .where(eq(mediaBlobs.id, id))
@@ -129,7 +221,8 @@ class DatabaseStorageProvider implements StorageProvider {
         createdAt: mediaBlobs.createdAt,
       })
       .from(mediaBlobs)
-      .orderBy(desc(mediaBlobs.createdAt));
+      .orderBy(desc(mediaBlobs.createdAt))
+      .limit(200);
 
     return rows.map((r) => ({
       id: r.id,

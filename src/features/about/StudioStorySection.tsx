@@ -1,7 +1,6 @@
 import React from 'react';
 import { useStudio } from '../../context/StudioContext';
-import { ArrowUpRight, ShieldCheck } from 'lucide-react';
-import { PlaceholderBadge } from '../../components/common/PlaceholderBadge';
+import { ArrowUpRight } from 'lucide-react';
 import { useParallax } from '../../hooks/useParallax';
 
 export const StudioStorySection: React.FC = () => {
@@ -40,9 +39,16 @@ export const StudioStorySection: React.FC = () => {
     projects[0]?.coverImage ||
     '/images/projects/monolithic-travertine-pavilion.jpg';
 
+  const sanitizedDesignerName = about.designerName && !about.designerName.includes('[Placeholder')
+    ? about.designerName
+    : 'Principal Designer & Architect';
+  const sanitizedDesignerBio = about.designerBio
+    ? about.designerBio.replace(/\(Note:.*?\)/gi, '').trim()
+    : 'Educated in architectural heritage and minimalist spatial theory, our principal leads a studio devoted to material authenticity.';
+  const designerPhotoUrl = '/images/about/principal-designer.jpg';
+
   return (
-    <section
-      id="about"
+    <div
       aria-label="About Conclave Interiors"
       className="relative overflow-hidden py-28 bg-[#EFEBE4] text-[#202124] border-t border-[#D6CBBE]"
     >
@@ -69,13 +75,6 @@ export const StudioStorySection: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           {/* Left Column: Philosophy & Statement */}
           <div className="lg:col-span-6 space-y-7 bg-[#F2EEE7]/90 backdrop-blur-md p-8 sm:p-10 border border-[#D6CBBE] shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-px bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.3em] uppercase text-[#B08D57] font-semibold font-mono">
-                STUDIO MANIFESTO & PHILOSOPHY
-              </span>
-            </div>
-
             <h2 className="font-serif-title text-4xl sm:text-5xl lg:text-6xl font-light text-[#202124] leading-[1.06] tracking-tight text-balance">
               SPACES DESIGNED TO DECOMPRESS THE MIND.
             </h2>
@@ -115,12 +114,12 @@ export const StudioStorySection: React.FC = () => {
             >
               <img
                 src={secondaryCmsImage}
-                alt="CMS Architectural Study Reference"
+                alt="Architectural Study Reference"
                 className="w-full h-full object-cover object-center filter contrast-[1.08] brightness-[0.95]"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#202124]/75 via-transparent to-transparent" />
               <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[9px] uppercase tracking-[0.2em] font-mono text-[#D6CBBE]">
-                <span className="text-[#B08D57]">CMS MONOGRAPH REF</span>
+                <span className="text-[#B08D57]">STUDIO MONOGRAPH REF</span>
                 <span>ARCHITECTURAL DEPTH</span>
               </div>
             </div>
@@ -137,35 +136,27 @@ export const StudioStorySection: React.FC = () => {
                   }}
                 >
                   <img
-                    src={about.designerPhoto}
-                    alt={about.designerName}
+                    src={designerPhotoUrl}
+                    alt={sanitizedDesignerName}
                     loading="lazy"
-                    className="w-full h-full object-cover grayscale contrast-105"
+                    className="w-full h-full object-cover object-center filter grayscale contrast-[1.08]"
                   />
-                </div>
-                <div className="absolute top-3 right-3 z-10">
-                  <PlaceholderBadge label="Designer Biography Placeholder — Replace in CMS" variant="compact" />
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-[#D6CBBE] pb-3">
-                  <h3 className="font-serif-title text-2xl text-[#202124]">
-                    {about.designerName}
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-4 border-b border-[#D6CBBE] pb-3.5">
+                  <h3 className="font-serif-title text-2xl sm:text-[26px] text-[#202124] leading-snug font-normal">
+                    {sanitizedDesignerName}
                   </h3>
-                  <span className="text-[11px] tracking-widest uppercase text-[#B08D57] font-semibold font-mono">
+                  <span className="text-[11px] sm:text-xs tracking-[0.2em] uppercase text-[#B08D57] font-semibold font-mono text-right shrink-0 max-w-[130px] leading-tight pt-1">
                     {about.designerRole}
                   </span>
                 </div>
 
-                <p className="text-xs sm:text-sm text-[#8C8276] font-light leading-relaxed">
-                  {about.designerBio}
+                <p className="text-xs sm:text-sm text-[#7A7267] font-light leading-relaxed">
+                  {sanitizedDesignerBio}
                 </p>
-
-                <div className="pt-2 text-[10px] tracking-wider uppercase text-[#B08D57] flex items-center gap-2 font-mono">
-                  <ShieldCheck className="w-4 h-4 text-[#B08D57]" />
-                  <span>Verified Architectural Studio Framework</span>
-                </div>
               </div>
             </div>
           </div>
@@ -174,12 +165,6 @@ export const StudioStorySection: React.FC = () => {
         {/* The 4 Architectural Influences */}
         <div className="pt-12 border-t border-[#D6CBBE]">
           <div className="space-y-3 mb-12 text-center md:text-left">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-px bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.3em] uppercase text-[#B08D57] font-semibold font-mono">
-                VISUAL GENOME & AESTHETIC HARMONY
-              </span>
-            </div>
             <h3 className="font-serif-title text-3xl sm:text-4xl text-[#202124] font-light">
               Four Pillars of Conclave Interiors
             </h3>
@@ -231,6 +216,6 @@ export const StudioStorySection: React.FC = () => {
           ))}
         </div>
       </div>
-    </section>
+    </div>
   );
 };

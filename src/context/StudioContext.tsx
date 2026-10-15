@@ -85,12 +85,17 @@ interface StudioContextType {
   updateSettings: (newSettings: Partial<SiteSettings>) => Promise<void>;
   updateAbout: (newAbout: Partial<AboutStudioData>) => Promise<void>;
 
-  // Project CMS
+  // Project CMS & Restricted Media Operations
   addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
   duplicateProject: (id: string) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   publishProject: (id: string, isPublished: boolean) => Promise<void>;
+  addProjectPhoto: (id: string, data: { url: string; alt?: string; caption?: string; setAsCover?: boolean }) => Promise<{ success: boolean; project: Project }>;
+  setProjectCoverPhoto: (id: string, url: string) => Promise<{ success: boolean; project: Project }>;
+  deleteProjectPhoto: (id: string, url: string) => Promise<{ success: boolean; project: Project }>;
+  attachProjectVideo: (id: string, videoUrl: string) => Promise<{ success: boolean; project: Project }>;
+  deleteProjectVideo: (id: string) => Promise<{ success: boolean; project: Project }>;
 
   // Hero CMS
   addHeroSlide: (slide: Omit<HeroSlide, 'id'>) => Promise<void>;
@@ -117,7 +122,7 @@ interface StudioContextType {
     rating: number;
     feedbackMessage: string;
   }) => Promise<{ success: boolean; message: string }>;
-  moderateFeedback: (id: string, status: 'APPROVED' | 'REJECTED', isFeatured?: boolean) => Promise<void>;
+  moderateFeedback: (id: string, status: 'APPROVED' | 'REJECTED' | 'PENDING', isFeatured?: boolean) => Promise<void>;
   toggleFeatureFeedback: (id: string) => Promise<void>;
   deleteFeedback: (id: string) => Promise<void>;
 
@@ -152,7 +157,35 @@ const STORAGE_KEYS = {
 };
 
 export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activePage, setActivePage] = useState<string>('home');
+  const [activePage, setActivePage] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const raw = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
+      const path = window.location.pathname.toLowerCase();
+      const search = new URLSearchParams(window.location.search);
+
+      if (raw === 'home' || raw === 'portfolio' || search.get('view') === 'home') {
+        return 'home';
+      }
+      if (
+        raw === 'admin' ||
+        raw === 'cms' ||
+        path.startsWith('/admin') ||
+        path.startsWith('/cms') ||
+        search.has('cms') ||
+        search.has('admin') ||
+        search.get('view') === 'cms' ||
+        search.get('view') === 'admin'
+      ) {
+        return 'admin';
+      }
+      const saved = localStorage.getItem('conclave_active_view');
+      if (saved === 'home') {
+        return 'home';
+      }
+    }
+    // Default to 'home' for standard public site visitors
+    return 'home';
+  });
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isQueryModalOpen, setIsQueryModalOpen] = useState<boolean>(false);
   const [queryInitialTab, setQueryInitialTab] = useState<'whatsapp' | 'call' | 'enquiry'>('enquiry');
@@ -191,7 +224,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (!parsed.facebookUrl || parsed.facebookUrl.includes('conclaveinteriors')) {
           parsed.facebookUrl = 'https://www.facebook.com/AmirulDesigner';
         }
-        if (!parsed.address || parsed.address.includes('Berkeley') || parsed.address.includes('Kolkata - 700085')) {
+        if (!parsed.address || parsed.address.includes('Berkeley') || parsed.address.includes('Studio 408') || parsed.address.includes('Metropolitan') || parsed.address.includes('Architectural Quarter')) {
           parsed.address = '55, Canal East Road Kolkata - 700085, West Bengal, India';
         }
         if (parsed.workingHours) {
@@ -215,7 +248,25 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-    return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+    if (saved) {
+      try {
+        const parsed: Project[] = JSON.parse(saved);
+        return parsed.map((p) => {
+          const init = INITIAL_PROJECTS.find((ip) => ip.id === p.id);
+          if (init?.videoUrl && !p.videoUrl) {
+            return {
+              ...p,
+              videoUrl: init.videoUrl,
+              galleryImages: p.galleryImages?.length > 1 ? p.galleryImages : init.galleryImages,
+            };
+          }
+          return p;
+        });
+      } catch {
+        return INITIAL_PROJECTS;
+      }
+    }
+    return INITIAL_PROJECTS;
   });
 
   const [stripItems, setStripItems] = useState<ContinuousStripItem[]>(() => {
@@ -248,55 +299,71 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : INITIAL_ABOUT;
   });
 
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(true);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
 
   const [currentUser, setCurrentUser] = useState<{
     email?: string | null;
     displayName?: string | null;
     photoURL?: string | null;
     role?: string;
-  } | null>({
-    email: 'conclaveinteriorexterior@gmail.com',
-    displayName: 'Studio Principal',
-    role: 'admin',
-  });
+  } | null>(null);
 
-  // Sync activePage with URL hash (e.g. #admin, #about, #services, #projects, etc.)
+  // Sync activePage with URL hash and navigation (e.g. #admin, #cms, #home, etc.)
   useEffect(() => {
     const handleHash = () => {
       const raw = window.location.hash.toLowerCase().replace(/^#\/?/, '').trim();
-      if (raw === 'admin') {
+      const path = window.location.pathname.toLowerCase();
+      const search = new URLSearchParams(window.location.search);
+
+      if (
+        raw === 'admin' ||
+        raw === 'cms' ||
+        path.startsWith('/admin') ||
+        path.startsWith('/cms') ||
+        search.has('cms') ||
+        search.has('admin') ||
+        search.get('view') === 'cms' ||
+        search.get('view') === 'admin'
+      ) {
         setActivePage('admin');
+      } else if (raw === 'home' || raw === 'portfolio' || search.get('view') === 'home') {
+        setActivePage('home');
       } else if (
-        ['home', 'about', 'services', 'projects', 'approach', 'contact', 'testimonials', 'faq'].includes(raw)
+        ['about', 'services', 'projects', 'approach', 'contact', 'testimonials', 'faq'].includes(raw)
       ) {
         setActivePage(raw);
-      } else if (!raw && activePage === 'admin') {
-        setActivePage('home');
       }
     };
 
     handleHash();
     window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, [activePage]);
+    window.addEventListener('popstate', handleHash);
+    return () => {
+      window.removeEventListener('hashchange', handleHash);
+      window.removeEventListener('popstate', handleHash);
+    };
+  }, []);
 
-  // Session retrieval (Keeps admin authenticated without login requirement)
+  // Session retrieval: Strictly verifies if active administrator session exists
   useEffect(() => {
     async function checkSession() {
       try {
         const sessionRes = await api.getSession();
-        if (sessionRes && sessionRes.user) {
+        if (sessionRes && sessionRes.authenticated && sessionRes.user) {
           setCurrentUser({
-            email: sessionRes.user.email || 'conclaveinteriorexterior@gmail.com',
+            email: sessionRes.user.email,
             displayName: sessionRes.user.displayName || 'Studio Principal',
             role: sessionRes.user.role || 'admin',
           });
+          setIsAdminLoggedIn(true);
+        } else {
+          setCurrentUser(null);
+          setIsAdminLoggedIn(false);
         }
       } catch {
-        // Keep active administrator
+        setCurrentUser(null);
+        setIsAdminLoggedIn(false);
       } finally {
-        setIsAdminLoggedIn(true);
         setAuthLoading(false);
       }
     }
@@ -456,11 +523,25 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // -------------------------------------------------------------
   // AUTHENTICATION METHODS (PostgreSQL Session Auth)
   // -------------------------------------------------------------
-  const loginAdmin = async (_email: string, _password: string): Promise<{ success: boolean; error?: string }> => {
-    setIsAdminLoggedIn(true);
-    localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
-    await refreshFromDatabase();
-    return { success: true };
+  const loginAdmin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await api.login(email, password);
+      if (res && res.authenticated) {
+        setIsAdminLoggedIn(true);
+        setCurrentUser({
+          email: res.user?.email || email,
+          displayName: res.user?.displayName || 'Studio Principal',
+          role: res.user?.role || 'admin',
+        });
+        localStorage.setItem(STORAGE_KEYS.AUTH, 'true');
+        await refreshFromDatabase();
+        return { success: true };
+      }
+      return { success: false, error: 'Authentication failed.' };
+    } catch (err: any) {
+      console.error('Login error:', err);
+      return { success: false, error: err.message || 'Invalid administrator email or password.' };
+    }
   };
 
   const logoutAdmin = async () => {
@@ -468,8 +549,13 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await api.logout();
     } catch (err) {
       console.warn('Logout error:', err);
+    } finally {
+      setIsAdminLoggedIn(false);
+      setCurrentUser(null);
+      localStorage.removeItem(STORAGE_KEYS.AUTH);
+      localStorage.removeItem('conclave_active_view');
+      setActivePage('home');
     }
-    setActivePage('home');
   };
 
   const changePassword = async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
@@ -577,6 +663,46 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (err) {
       console.error(`Failed to update project ${id} publish state:`, err);
     }
+  };
+
+  const addProjectPhoto = async (id: string, data: { url: string; alt?: string; caption?: string; setAsCover?: boolean }) => {
+    const res = await api.addProjectPhoto(id, data);
+    if (res.project) {
+      setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
+    }
+    return res;
+  };
+
+  const setProjectCoverPhoto = async (id: string, url: string) => {
+    const res = await api.setProjectCoverPhoto(id, url);
+    if (res.project) {
+      setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
+    }
+    return res;
+  };
+
+  const deleteProjectPhoto = async (id: string, url: string) => {
+    const res = await api.deleteProjectPhoto(id, url);
+    if (res.project) {
+      setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
+    }
+    return res;
+  };
+
+  const attachProjectVideo = async (id: string, videoUrl: string) => {
+    const res = await api.attachProjectVideo(id, videoUrl);
+    if (res.project) {
+      setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
+    }
+    return res;
+  };
+
+  const deleteProjectVideo = async (id: string) => {
+    const res = await api.deleteProjectVideo(id);
+    if (res.project) {
+      setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
+    }
+    return res;
   };
 
   const addHeroSlide = async (slide: Omit<HeroSlide, 'id'>) => {
@@ -748,7 +874,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const moderateFeedback = async (id: string, status: 'APPROVED' | 'REJECTED', isFeatured?: boolean) => {
+  const moderateFeedback = async (id: string, status: 'APPROVED' | 'REJECTED' | 'PENDING', isFeatured?: boolean) => {
     setTestimonials((prev) =>
       prev.map((t) =>
         t.id === id
@@ -951,6 +1077,11 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         duplicateProject,
         deleteProject,
         publishProject,
+        addProjectPhoto,
+        setProjectCoverPhoto,
+        deleteProjectPhoto,
+        attachProjectVideo,
+        deleteProjectVideo,
         addHeroSlide,
         updateHeroSlide,
         deleteHeroSlide,

@@ -7,7 +7,7 @@ export const SmoothScrollProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const lenisRef = useRef<Lenis | null>(null);
 
   useEffect(() => {
-    // Disable smooth scrolling when viewing the CMS admin panel
+    // Disable smooth scrolling when viewing the admin panel
     if (activePage === 'admin') {
       if (lenisRef.current) {
         lenisRef.current.destroy();

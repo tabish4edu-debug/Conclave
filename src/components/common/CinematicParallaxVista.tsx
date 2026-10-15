@@ -4,7 +4,7 @@ import { ArrowUpRight } from 'lucide-react';
 
 export interface CinematicParallaxVistaProps {
   id?: string;
-  chapterNumber: string;
+  chapterNumber?: string;
   title: string;
   subtitle: string;
   materialSpecification?: string;
@@ -34,7 +34,7 @@ export const CinematicParallaxVista: React.FC<CinematicParallaxVistaProps> = ({
   materialSpecification,
   imageUrl,
   imageAlt,
-  heightClass = 'h-[65vh] sm:h-[75vh] lg:h-[85vh]',
+  heightClass = 'min-h-[520px] h-[70vh] sm:h-[80vh] lg:h-[85vh]',
   theme = 'light',
   speed = 0.26,
   focalPosition = 'object-center',
@@ -65,7 +65,7 @@ export const CinematicParallaxVista: React.FC<CinematicParallaxVistaProps> = ({
     <section
       id={id}
       ref={containerRef}
-      aria-label={`${chapterNumber}: ${title}`}
+      aria-label={chapterNumber ? `${chapterNumber}: ${title}` : title}
       className={`relative w-full overflow-hidden select-none flex items-center justify-center ${heightClass} ${
         isDark ? 'bg-[#202124] text-[#F2EEE7]' : 'bg-[#F2EEE7] text-[#202124]'
       } ${className}`}
@@ -137,18 +137,10 @@ export const CinematicParallaxVista: React.FC<CinematicParallaxVistaProps> = ({
           }`}
         />
 
-        {/* Chapter / Material Kicker */}
-        <div className="inline-flex items-center gap-3 px-3 py-1 bg-black/25 backdrop-blur-md rounded-xs border border-[#B08D57]/40 shadow-xs">
-          <span className="w-4 h-px bg-[#B08D57]" />
-          <span className="text-[10px] sm:text-[11px] tracking-[0.35em] uppercase font-mono font-semibold text-[#B08D57]">
-            {chapterNumber}
-          </span>
-          <span className="w-4 h-px bg-[#B08D57]" />
-        </div>
 
         {/* Hero Architectural Title */}
         <h2
-          className={`font-serif-title text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-normal md:font-medium tracking-tight leading-[1.06] text-balance ${
+          className={`font-serif-title text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-normal md:font-medium tracking-tight leading-[1.3] sm:leading-[1.26] md:leading-[1.22] text-balance my-2 py-1 ${
             titleClassName
               ? titleClassName
               : isDark

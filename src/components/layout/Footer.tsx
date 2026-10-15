@@ -1,7 +1,6 @@
 import React from 'react';
 import { useStudio } from '../../context/StudioContext';
 import { ArrowUp } from 'lucide-react';
-import { PlaceholderBadge } from '../common/PlaceholderBadge';
 
 export const Footer: React.FC = () => {
   const { settings } = useStudio();
@@ -48,10 +47,6 @@ export const Footer: React.FC = () => {
             <p className="text-sm text-[#D6CBBE] max-w-sm font-light leading-relaxed">
               {settings.footerAboutText || 'An architectural interior design practice shaping spaces that speak in silence. Dedicated to raw texture, natural illumination, and enduring proportion across luxury residential and commercial environments.'}
             </p>
-
-            <div className="pt-2">
-              <PlaceholderBadge label="Client Demonstration Build · Handover Ready" />
-            </div>
           </div>
 
           {/* Quick Links Directory (3 cols) */}
@@ -60,6 +55,11 @@ export const Footer: React.FC = () => {
               Quick Links
             </h4>
             <ul className="space-y-2.5 text-xs text-[#D6CBBE] uppercase tracking-wider font-light">
+              <li>
+                <a href="#about" className="hover:text-[#B08D57] transition-colors">
+                  Studio Story &amp; About
+                </a>
+              </li>
               <li>
                 <a href="#noir-sanctuary" className="hover:text-[#B08D57] transition-colors">
                   Atelier Sanctuary
@@ -172,6 +172,16 @@ export const Footer: React.FC = () => {
 
           <div className="flex items-center gap-6">
             <span>Mumbai · London · Dubai</span>
+            <a
+              href="#admin"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.hash = '#admin';
+              }}
+              className="text-[#6E6A64] hover:text-[#B08D57] transition-colors"
+            >
+              Atelier Portal
+            </a>
             <button
               onClick={scrollToTop}
               className="flex items-center gap-1.5 text-[#B08D57] hover:text-[#F2EEE7] transition-colors cursor-pointer"

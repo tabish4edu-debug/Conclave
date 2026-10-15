@@ -14,7 +14,7 @@ import {
   sessions,
   publicationHistory,
 } from './schema.ts';
-import { eq, desc, asc, and } from 'drizzle-orm';
+import { eq, desc, asc, and, lt } from 'drizzle-orm';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import {
@@ -36,13 +36,26 @@ function hashSessionToken(token: string): string {
 
 export async function findUserByEmail(email: string) {
   const normalized = email.trim().toLowerCase();
-  const allUsers = await db.select().from(users);
-  return allUsers.find((u) => u.email.trim().toLowerCase() === normalized) || null;
+  const result = await db.select().from(users).where(eq(users.email, normalized)).limit(1);
+  return result[0] || null;
 }
 
 export async function findUserById(id: number) {
   const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return result[0] || null;
+}
+
+export async function cleanExpiredSessions(): Promise<number> {
+  try {
+    const deleted = await db
+      .delete(sessions)
+      .where(lt(sessions.expiresAt, new Date()))
+      .returning({ id: sessions.id });
+    return deleted.length;
+  } catch (err) {
+    // If DB is offline, fail gracefully
+    return 0;
+  }
 }
 
 export async function initAdminAccount() {
@@ -52,25 +65,14 @@ export async function initAdminAccount() {
   }
 
   let existing = await findUserByEmail(adminEmail);
-
-  // If the admin user with this email does not exist yet, check if an existing admin record is present
-  // and migrate its email so the configured passwordHash is preserved
-  if (!existing) {
-    const legacyAdmins = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
-    if (legacyAdmins.length > 0) {
-      await db
-        .update(users)
-        .set({ email: adminEmail, updatedAt: new Date() })
-        .where(eq(users.id, legacyAdmins[0].id));
-      console.log(`[AUTH] Updated administrator account (ID: ${legacyAdmins[0].id}) email to ${adminEmail}.`);
-      existing = await findUserByEmail(adminEmail);
-    }
-  }
-
   const initialPassword = process.env.ADMIN_INITIAL_PASSWORD?.trim();
 
-  // Helper to validate production initial password strength
-  const validateProductionPassword = (pwd: string | undefined) => {
+  // Helper to validate initial administrator password policy across environments
+  const validateInitialPassword = (pwd: string | undefined) => {
+    if (!pwd) return;
+    if (pwd.length < 8) {
+      throw new Error('SECURITY FATAL: ADMIN_INITIAL_PASSWORD must be at least 8 characters long.');
+    }
     if (process.env.NODE_ENV === 'production') {
       const devDefaults = [
         'TestSecurePass123!',
@@ -80,7 +82,7 @@ export async function initAdminAccount() {
         '12345678',
         'admin123',
       ];
-      if (!pwd || devDefaults.includes(pwd) || pwd.length < 12) {
+      if (devDefaults.includes(pwd) || pwd.length < 12) {
         throw new Error(
           'SECURITY FATAL: In production, ADMIN_INITIAL_PASSWORD must be a unique, strong password (minimum 12 characters) and cannot use development placeholders.'
         );
@@ -92,7 +94,7 @@ export async function initAdminAccount() {
     // If the existing admin record has no password and ADMIN_INITIAL_PASSWORD is provided, set it
     // Note: If passwordHash is already present, it is preserved completely (preventing accidental password resets)
     if (!existing.passwordHash && initialPassword) {
-      validateProductionPassword(initialPassword);
+      validateInitialPassword(initialPassword);
       const passwordHash = await bcrypt.hash(initialPassword, 12);
       await db
         .update(users)
@@ -103,7 +105,7 @@ export async function initAdminAccount() {
   } else {
     // Create new admin user record
     if (initialPassword) {
-      validateProductionPassword(initialPassword);
+      validateInitialPassword(initialPassword);
     }
     const passwordHash = initialPassword ? await bcrypt.hash(initialPassword, 12) : null;
     const uid = `admin-${crypto.randomBytes(8).toString('hex')}`;
@@ -170,21 +172,25 @@ export async function updateUserPassword(userId: number, newPasswordHash: string
     .where(eq(users.id, userId));
 }
 
-// User helper
+// User helper - enforces strict server-side role verification
 export async function getOrCreateUser(uid: string, email: string, displayName?: string, photoUrl?: string) {
   try {
     const existing = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
     if (existing.length > 0) {
       return existing[0];
     }
+    const adminEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
+    const normalizedEmail = email ? email.trim().toLowerCase() : '';
+    // Security: Only assign admin role if email matches the authorized ADMIN_EMAIL
+    const role = normalizedEmail && normalizedEmail === adminEmail ? 'admin' : 'user';
     const result = await db
       .insert(users)
       .values({
         uid,
-        email,
+        email: normalizedEmail,
         displayName: displayName || null,
         photoUrl: photoUrl || null,
-        role: 'admin',
+        role,
       })
       .returning();
     return result[0];
@@ -243,6 +249,7 @@ export async function createProject(data: typeof projects.$inferInsert) {
       materialsPalette: data.materialsPalette || raw.materials_palette || [],
       coverImage: data.coverImage || raw.cover_image || '/images/projects/monolithic-travertine-pavilion.jpg',
       galleryImages: data.galleryImages || raw.gallery_images || [],
+      videoUrl: data.videoUrl || raw.video_url || null,
       isFeatured: data.isFeatured ?? raw.is_featured ?? false,
       status: data.status || raw.status || 'draft',
       sortOrder: data.sortOrder ?? raw.sort_order ?? 0,
@@ -265,6 +272,7 @@ export async function updateProject(id: string, data: Partial<typeof projects.$i
     if (raw.cover_image !== undefined && updates.coverImage === undefined) updates.coverImage = raw.cover_image;
     if (raw.materials_palette !== undefined && updates.materialsPalette === undefined) updates.materialsPalette = raw.materials_palette;
     if (raw.gallery_images !== undefined && updates.galleryImages === undefined) updates.galleryImages = raw.gallery_images;
+    if (raw.video_url !== undefined && updates.videoUrl === undefined) updates.videoUrl = raw.video_url;
     if (raw.architectural_brief !== undefined && updates.architecturalBrief === undefined) updates.architecturalBrief = raw.architectural_brief;
     if (raw.area_sq_ft !== undefined && updates.areaSqFt === undefined) updates.areaSqFt = raw.area_sq_ft;
     if (raw.is_featured !== undefined && updates.isFeatured === undefined) updates.isFeatured = raw.is_featured;
@@ -275,6 +283,7 @@ export async function updateProject(id: string, data: Partial<typeof projects.$i
     delete updates.cover_image;
     delete updates.materials_palette;
     delete updates.gallery_images;
+    delete updates.video_url;
     delete updates.architectural_brief;
     delete updates.area_sq_ft;
     delete updates.is_featured;
@@ -602,7 +611,7 @@ export async function moderateTestimonial(id: string, status: 'APPROVED' | 'REJE
       updateData.isFeatured = isFeatured;
     }
     const res = await db.update(testimonials).set(updateData).where(eq(testimonials.id, id)).returning();
-    return res[0];
+    return res[0] || null;
   } catch (error) {
     console.error(`Error moderating testimonial ${id}:`, error);
     throw new Error('Could not moderate testimonial');
@@ -1074,6 +1083,7 @@ export async function seedInitialDatabaseIfEmpty() {
           materialsPalette: p.materialsPalette,
           coverImage: p.coverImage,
           galleryImages: p.galleryImages,
+          videoUrl: p.videoUrl || null,
           isFeatured: p.isFeatured,
           status: p.status,
           sortOrder: p.sortOrder,

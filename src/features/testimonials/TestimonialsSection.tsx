@@ -45,12 +45,6 @@ export const TestimonialsSection: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-12 border-b border-[#3A3C3E]">
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-px bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.3em] uppercase text-[#B08D57] font-semibold font-mono">
-                PATRON TESTIMONIALS
-              </span>
-            </div>
             <h2 className="font-serif-title text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight text-[#F2EEE7]">
               CLIENT REFLECTIONS
             </h2>
@@ -122,24 +116,12 @@ export const TestimonialsSection: React.FC = () => {
             ))
           ) : (
             <div className="col-span-3 text-center py-12 text-[#8C8276]">
-              No approved client reviews currently published. Reviews submitted are moderated via the Studio CMS.
+              No approved client reviews currently published. Reviews submitted are moderated via the Studio Admin Portal.
             </div>
           )}
         </div>
 
-        {/* Security & Moderation Transparency Note */}
-        <div className="mt-12 p-4 bg-[#2B2D2F]/60 border border-[#3A3C3E] flex flex-wrap items-center justify-between gap-4 text-xs text-[#8C8276]">
-          <span className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-[#B08D57]" />
-            Strict Studio Quality Policy: All client reviews undergo moderation to ensure authentic project references.
-          </span>
-          <button
-            onClick={() => setIsFeedbackModalOpen(true)}
-            className="text-[#B08D57] hover:underline uppercase tracking-wider text-[11px] font-mono cursor-pointer"
-          >
-            Submit your feedback &rarr;
-          </button>
-        </div>
+
       </div>
 
       {/* Public Feedback Modal */}

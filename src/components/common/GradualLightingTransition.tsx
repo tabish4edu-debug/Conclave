@@ -103,15 +103,6 @@ export const GradualLightingTransition: React.FC<GradualLightingTransitionProps>
 
       {/* 4. Layered Editorial Text Monologue */}
       <div className="relative z-20 max-w-4xl mx-auto px-6 text-center space-y-4">
-        {eyebrow && (
-          <div className="inline-flex items-center justify-center gap-3">
-            <span className="w-6 h-px bg-[#B08D57]" />
-            <span className="text-[10px] tracking-[0.35em] uppercase text-[#B08D57] font-semibold font-mono">
-              {eyebrow}
-            </span>
-            <span className="w-6 h-px bg-[#B08D57]" />
-          </div>
-        )}
 
         <h3
           className={`font-serif-title text-3xl sm:text-4xl md:text-5xl font-light tracking-tight leading-snug drop-shadow-sm ${

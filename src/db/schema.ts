@@ -35,6 +35,7 @@ export const projects = pgTable('projects', {
   materialsPalette: jsonb('materials_palette').$type<string[]>().notNull().default([]),
   coverImage: text('cover_image').notNull().default('/images/projects/monolithic-travertine-pavilion.jpg'),
   galleryImages: jsonb('gallery_images').$type<{ url: string; alt: string; caption?: string }[]>().notNull().default([]),
+  videoUrl: text('video_url'),
   isFeatured: boolean('is_featured').notNull().default(false),
   status: text('status').notNull().default('published'), // 'published' | 'draft'
   sortOrder: integer('sort_order').notNull().default(0),

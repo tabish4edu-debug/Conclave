@@ -26,6 +26,9 @@ import { NoirCinematicScene } from './components/common/NoirCinematicScene';
 import { AdminPanel } from './features/admin/AdminPanel';
 import { FadingDissolveTransition } from './components/common/FadingDissolveTransition';
 import { SmoothScrollProvider } from './components/common/SmoothScrollProvider';
+import { CmsPreviewDock } from './components/common/CmsPreviewDock';
+import { HorizontalProjectGallery } from './features/projects/HorizontalProjectGallery';
+import { StudioStorySection } from './features/about/StudioStorySection';
 
 const PortfolioSite: React.FC = () => {
   const { settings } = useStudio();
@@ -65,11 +68,19 @@ const PortfolioSite: React.FC = () => {
           </ScrollThemeSection>
         )}
 
+        {/* 3. Studio Story & Principal Designer Profile — LIGHT */}
+        {isSectionVisible('showAbout') && (
+          <ScrollThemeSection theme="light" id="about" as="div">
+            <ScrollReveal distancePx={32}>
+              <StudioStorySection />
+            </ScrollReveal>
+          </ScrollThemeSection>
+        )}
+
         {/* FULL-WIDTH PARALLAX VISTA 01: Travertine Living Volume */}
         {isSectionVisible('showFeaturedProjects') && (
           <CinematicParallaxVista
             id="vista-void-travertine"
-            chapterNumber={settings.vista1Chapter || "VISTA 01 · SPATIAL VOLUME"}
             title={
               !settings.vista1Title || settings.vista1Title === 'FLUTED LIMESTONE & BRONZE APERTURES'
                 ? "THE MONUMENTAL VOID & HONED TRAVERTINE"
@@ -88,10 +99,20 @@ const PortfolioSite: React.FC = () => {
           />
         )}
 
+        {/* 3. Horizontal Project Gallery with Video Walkthrough Popup — LIGHT */}
+        {isSectionVisible('showFeaturedProjects') && (
+          <ScrollThemeSection theme="light" id="projects">
+            <ScrollReveal distancePx={28}>
+              <div id="our-works" className="scroll-mt-24">
+                <HorizontalProjectGallery />
+              </div>
+            </ScrollReveal>
+          </ScrollThemeSection>
+        )}
+
         {/* FULL-WIDTH PARALLAX VISTA 02: Limewash Plaster & Minimalist Master Suite */}
         <CinematicParallaxVista
           id="vista-plaster-ash"
-          chapterNumber={settings.vista2Chapter || "VISTA 02 · RESIDENTIAL SERENITY"}
           title={settings.vista2Title || "MINIMALIST PROPORTION & LIMEWASH PLASTER"}
           subtitle={settings.vista2Subtitle || "Textured mineral surfaces that catch the shifting daylight, creating quiet domestic environments sculpted for deep rest."}
           materialSpecification={settings.vista2Spec || "SPECIFICATION: LIMEWASH PLASTER · BLEACHED ASH · SATIN CHAMPAGNE"}
@@ -99,7 +120,7 @@ const PortfolioSite: React.FC = () => {
           imageAlt="Minimalist master suite with limewash plaster and ash timber"
           theme="light"
           speed={0.25}
-          titleClassName="font-medium md:font-semibold text-[#0a0a0a] drop-shadow-[0_2px_20px_rgba(255,255,255,1)] drop-shadow-[0_1px_3px_rgba(255,255,255,1)]"
+          titleClassName="font-medium md:font-semibold text-[#0a0a0a] !leading-[1.28] sm:!leading-[1.24] md:!leading-[1.2] py-2 tracking-tight drop-shadow-[0_2px_12px_rgba(255,255,255,0.85)] drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]"
           overlayOpacity={0.32}
         />
 
@@ -205,12 +226,15 @@ const MainContent: React.FC = () => {
   const isCmsAdmin = activePage === 'admin';
 
   return (
-    <FadingDissolveTransition
-      activeKey={isCmsAdmin ? 'admin' : 'portal'}
-      className="min-h-screen"
-    >
-      {isCmsAdmin ? <AdminPanel /> : <PortfolioSite />}
-    </FadingDissolveTransition>
+    <>
+      <FadingDissolveTransition
+        activeKey={isCmsAdmin ? 'admin' : 'portal'}
+        className="min-h-screen"
+      >
+        {isCmsAdmin ? <AdminPanel /> : <PortfolioSite />}
+      </FadingDissolveTransition>
+      <CmsPreviewDock />
+    </>
   );
 };
 

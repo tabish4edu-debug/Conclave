@@ -12,7 +12,6 @@ import {
   AlertCircle,
   X,
 } from 'lucide-react';
-import { PlaceholderBadge } from '../../components/common/PlaceholderBadge';
 import { useParallax } from '../../hooks/useParallax';
 
 export const ContactSection: React.FC = () => {
@@ -189,16 +188,10 @@ ${formData.message.trim()}
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 lg:px-12 space-y-16">
         {/* Header */}
-        <div className={`flex flex-col md:flex-row md:items-end justify-between gap-6 pb-12 border-b transition-colors duration-700 ${
+        <div className={`pb-12 border-b transition-colors duration-700 ${
           isDark ? 'border-[#3A3C3E]' : 'border-[#D6CBBE]'
         }`}>
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-px bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.3em] uppercase text-[#B08D57] font-semibold font-mono">
-                COMMISSION INITIATION
-              </span>
-            </div>
             <h2 className={`font-serif-title text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight transition-colors duration-700 ${
               isDark ? 'text-[#F2EEE7]' : 'text-[#202124]'
             }`}>
@@ -210,8 +203,6 @@ ${formData.message.trim()}
               We welcome private residences, urban penthouses, and select hospitality environments. Tell us about your spatial aspirations.
             </p>
           </div>
-
-          <PlaceholderBadge label="Client Contact Data Placeholder — Replace via CMS" />
         </div>
 
         {/* Form and Contact Details Grid */}
@@ -281,7 +272,9 @@ ${formData.message.trim()}
                     <p className={`text-xs font-light leading-relaxed ${
                       isDark ? 'text-[#D6CBBE]' : 'text-[#202124]'
                     }`}>
-                      {settings.address || '55, Canal East Road Kolkata - 700085, West Bengal, India'}
+                      {settings.address && !settings.address.includes('Studio 408') && !settings.address.includes('Metropolitan')
+                        ? settings.address
+                        : '55, Canal East Road Kolkata - 700085, West Bengal, India'}
                     </p>
                   </div>
                 </div>

@@ -56,15 +56,6 @@ export const NoirCinematicScene: React.FC = () => {
 
       {/* 4. Foreground Content Composition */}
       <div className="relative z-20 max-w-6xl mx-auto px-6 md:px-10 lg:px-12 text-center flex flex-col items-center space-y-10">
-        {/* Kicker badge */}
-        <div className="inline-flex items-center gap-3 px-4 py-1.5 bg-[#202124]/80 backdrop-blur-md rounded-xs border border-[#B08D57]/50 shadow-md">
-          <span className="w-6 h-px bg-[#B08D57]" />
-          <span className="text-[10px] sm:text-xs tracking-[0.35em] uppercase font-mono font-semibold text-[#B08D57]">
-            ATMOSPHERIC SPECIALIZATION · NOIR ATELIER
-          </span>
-          <span className="w-6 h-px bg-[#B08D57]" />
-        </div>
-
         {/* Hero Title */}
         <div className="space-y-4 max-w-4xl">
           <h2 className="font-serif-title text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-light tracking-tight text-[#F2EEE7] leading-[1.04] text-balance">

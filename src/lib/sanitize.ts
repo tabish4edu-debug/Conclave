@@ -1,7 +1,7 @@
 /**
  * Server-side HTML & text sanitization utility
  * Ensures no arbitrary executable scripts, event handlers, or pseudo-protocols
- * are accepted from CMS input, while preserving clean editorial typography
+ * are accepted from admin input, while preserving clean editorial typography
  * (headings, paragraphs, bold, italic, lists, blockquotes, links).
  */
 
@@ -30,5 +30,7 @@ export function sanitizeHtml(input: string | undefined | null): string {
 
 export function sanitizeText(input: string | undefined | null): string {
   if (!input) return '';
-  return input.replace(/[<>]/g, '').trim();
+  const noScripts = input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  return noScripts.replace(/<[^>]*>/g, '').trim();
 }
+

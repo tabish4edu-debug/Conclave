@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useStudio } from '../../context/StudioContext';
 import { Project } from '../../types';
 import { ArrowUpRight, MapPin, Filter } from 'lucide-react';
-import { PlaceholderBadge } from '../../components/common/PlaceholderBadge';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { useParallax } from '../../hooks/useParallax';
 
@@ -165,10 +164,6 @@ export const FeaturedProjects: React.FC = () => {
             <p className="text-sm sm:text-base text-[#8C8276] max-w-xl font-light leading-relaxed">
               Disciplined architectural volumes, refined materiality, and sensory stillness. Each monograph represents an uncompromised spatial response.
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <PlaceholderBadge label="Client Placeholder Projects" variant="subtle" />
           </div>
         </div>
 

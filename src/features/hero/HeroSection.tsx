@@ -160,16 +160,6 @@ export const HeroSection: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
           {/* Left Column: Editorial Headline, Subtitle, CTAs & Proof Bar */}
           <div className="lg:col-span-7 xl:col-span-7 space-y-7">
-            {/* Eyebrow with Champagne Bronze line */}
-            <div className={`flex items-center gap-3 transition-all duration-700 ease-out delay-100 ${
-              isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
-            }`}>
-              <span className="h-0.5 w-8 bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.25em] uppercase text-[#B08D57] font-bold font-mono">
-                {currentSlide.label || 'INTERIOR DESIGN & BUILD'}
-              </span>
-            </div>
-
             {/* High-Contrast Serif Headline: Beautiful Interiors For Modern Living */}
             <h1 className={`font-serif-title text-4xl sm:text-5xl md:text-6xl lg:text-[4.2rem] font-normal tracking-tight text-[#202124] leading-[1.06] text-balance transition-all duration-900 ease-out delay-200 ${
               isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'
@@ -200,7 +190,7 @@ export const HeroSection: React.FC = () => {
               {currentSlide.supportingText}
             </p>
 
-            {/* Action Buttons: View Projects & Watch Our Video */}
+            {/* Action Button: View Projects / Explore Sanctuary */}
             <div className={`pt-2 flex flex-wrap items-center gap-4 transition-all duration-700 ease-out delay-500 ${
               isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
             }`}>
@@ -211,49 +201,20 @@ export const HeroSection: React.FC = () => {
                 <span>{currentSlide.primaryCtaText === 'Explore Services' ? 'Explore Sanctuary' : (currentSlide.primaryCtaText || 'Explore Sanctuary')}</span>
                 <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition-transform text-[#B08D57]" />
               </button>
-
-              <button
-                onClick={() => setIsVideoModalOpen(true)}
-                className="inline-flex items-center gap-2.5 px-6 py-3.5 bg-[#D6CBBE]/45 hover:bg-[#D6CBBE]/70 text-[#202124] font-semibold text-xs rounded-full border border-[#D6CBBE] transition-all cursor-pointer group shadow-2xs"
-              >
-                <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center text-[#B08D57] shadow-xs group-hover:scale-105 transition-transform">
-                  <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
-                </div>
-                <span>Watch Our Video</span>
-              </button>
             </div>
 
             {/* Proof Bar: 3 Avatars + 250+ Happy Clients | 10+ Years Experience | 20+ Turnkey Projects */}
             <div className={`pt-6 border-t border-[#D6CBBE] flex flex-wrap items-center gap-6 sm:gap-8 transition-all duration-700 ease-out delay-600 ${
               isHeroPreloaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
             }`}>
-              {/* Avatars + Clients */}
-              <div className="flex items-center gap-3">
-                <div className="flex -space-x-2">
-                  <img
-                    src="/images/about/principal-designer.jpg"
-                    alt="Client"
-                    className="w-8 h-8 rounded-full border-2 border-[#F2EEE7] object-cover"
-                  />
-                  <img
-                    src="/images/testimonials/avatar-patron-01.jpg"
-                    alt="Client"
-                    className="w-8 h-8 rounded-full border-2 border-[#F2EEE7] object-cover"
-                  />
-                  <img
-                    src="/images/testimonials/avatar-patron-02.jpg"
-                    alt="Client"
-                    className="w-8 h-8 rounded-full border-2 border-[#F2EEE7] object-cover"
-                  />
-                </div>
-                <div>
-                  <span className="font-serif-title text-xl font-bold text-[#202124] block leading-none">
-                    250+
-                  </span>
-                  <span className="text-[10px] text-[#8C8276] font-medium block mt-0.5">
-                    Happy Clients
-                  </span>
-                </div>
+              {/* Happy Clients */}
+              <div>
+                <span className="font-serif-title text-xl font-bold text-[#202124] block leading-none">
+                  250+
+                </span>
+                <span className="text-[10px] text-[#8C8276] font-medium block mt-0.5">
+                  Happy Clients
+                </span>
               </div>
 
               <div className="h-8 w-px bg-[#D6CBBE] hidden sm:block" />
@@ -302,27 +263,7 @@ export const HeroSection: React.FC = () => {
               {/* Subtle vignette scrim */}
               <div className="absolute inset-0 bg-gradient-to-t from-[#202124]/75 via-transparent to-transparent pointer-events-none" />
 
-              {/* Bottom Right Floating Atelier Seal: "Design Build Live Better" + Video Play Button */}
-              <div className="absolute bottom-5 right-6 flex items-center gap-3 z-10 text-white">
-                <div className="text-right">
-                  <span className="block font-serif-title text-sm sm:text-base font-semibold leading-tight text-[#F2EEE7]">
-                    Design
-                  </span>
-                  <span className="block font-serif-title text-sm sm:text-base font-semibold leading-tight text-[#F2EEE7]">
-                    Build
-                  </span>
-                  <span className="block text-[10px] sm:text-xs text-[#D6CBBE] font-light mt-0.5">
-                    Live Better
-                  </span>
-                </div>
-                <button
-                  onClick={() => setIsVideoModalOpen(true)}
-                  aria-label="Play Atelier Film"
-                  className="w-10 h-10 rounded-full border border-[#B08D57]/70 bg-[#202124]/80 backdrop-blur-xs flex items-center justify-center hover:scale-105 hover:border-[#B08D57] transition-all cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-[#B08D57] text-[#B08D57] ml-0.5" />
-                </button>
-              </div>
+
 
               {/* Live Slide Index Badge */}
               {slides.length > 1 && (

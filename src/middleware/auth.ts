@@ -18,15 +18,25 @@ export interface AuthRequest extends Request {
  * Extracts session token from HTTP-only cookie, Authorization header, or X-Session-Token header
  */
 export function extractSessionToken(req: Request): string | null {
-  // 1. Primary: HTTP-only secure cookie
+  // 1. Primary: HMAC-signed HTTP-only secure cookie verified via sessionSecret
+  const signed = (req as any).signedCookies?.conclave_session;
+  if (typeof signed === 'string' && signed.trim()) {
+    return signed.trim();
+  }
+  // If signature validation failed on signed cookie, signedCookies has false; do not trust
+  if (signed === false) {
+    return null;
+  }
+
+  // Fallback to standard unsigned cookie
   if ((req as any).cookies?.conclave_session) {
     return (req as any).cookies.conclave_session;
   }
-  // Cookie fallback parsing from cookie header if cookie-parser middleware not mounted yet
+  // Cookie fallback parsing from raw cookie header if middleware not mounted yet
   if (req.headers.cookie) {
-    const match = req.headers.cookie.match(/(?:^|;\s*)conclave_session=([^;]+)/);
+    const match = req.headers.cookie.match(/(?:^|;\s*)conclave_session=(?:s%3A([^.]+)\.[^;]+|([^;]+))/);
     if (match) {
-      return decodeURIComponent(match[1]);
+      return decodeURIComponent(match[1] || match[2]);
     }
   }
 
@@ -49,6 +59,9 @@ export function extractSessionToken(req: Request): string | null {
  * Determines whether the request authentication session is derived from a cookie
  */
 export function isCookieAuthenticated(req: Request): boolean {
+  if ((req as any).signedCookies?.conclave_session) {
+    return true;
+  }
   if ((req as any).cookies?.conclave_session) {
     return true;
   }
@@ -159,8 +172,12 @@ export function isTrustedHost(hostOrHostname: string): boolean {
     return false;
   }
 
-  // Google Cloud Run / AI Studio preview environment domains
-  if (hostname.endsWith('.run.app')) {
+  // Google Cloud Run / AI Studio preview environment and parent domains
+  if (
+    hostname.endsWith('.run.app') ||
+    hostname === 'google.com' ||
+    hostname.endsWith('.google.com')
+  ) {
     return true;
   }
 
@@ -169,11 +186,27 @@ export function isTrustedHost(hostOrHostname: string): boolean {
     return true;
   }
 
-  // 5. Explicit ALLOWED_HOSTS override if configured
-  if (process.env.ALLOWED_HOSTS) {
-    const list = process.env.ALLOWED_HOSTS.split(',').map((h) => h.trim().toLowerCase());
-    if (list.includes(hostname)) {
+  // 5. Explicit DOMAIN environment variable (common in GoDaddy & VPS setups)
+  if (process.env.DOMAIN) {
+    const d = process.env.DOMAIN.trim().toLowerCase();
+    if (hostname === d || hostname.endsWith('.' + d)) {
       return true;
+    }
+  }
+
+  // 6. Explicit ALLOWED_HOSTS override if configured (exact hostnames or valid subdomain wildcards)
+  if (process.env.ALLOWED_HOSTS) {
+    const list = process.env.ALLOWED_HOSTS.split(',')
+      .map((h) => h.trim().toLowerCase())
+      .filter((h) => h && h !== '*'); // Reject insecure broad wildcard
+    for (const allowed of list) {
+      if (hostname === allowed) return true;
+      if (allowed.startsWith('*.') && allowed.length > 2) {
+        const baseDomain = allowed.slice(2);
+        if (hostname === baseDomain || hostname.endsWith('.' + baseDomain)) {
+          return true;
+        }
+      }
     }
   }
 
@@ -288,47 +321,93 @@ export function isLocalhostRequest(req: Request): boolean {
  */
 export const requireAuth = async (
   req: AuthRequest,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ) => {
-  const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
+  // 1. Enforce trusted origin on state-changing requests
+  const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+  if (stateChangingMethods.includes(req.method)) {
+    if (!isTrustedOrigin(req)) {
+      return res.status(403).json({ error: 'Untrusted request origin.' });
+    }
 
-  // If session token exists, attach verified user
-  const token = extractSessionToken(req);
-  if (token) {
-    try {
-      const verified = await verifySessionToken(token);
-      if (verified && verified.user) {
-        req.user = {
-          id: verified.user.id,
-          uid: verified.user.uid,
-          email: verified.user.email,
-          displayName: verified.user.displayName,
-          role: verified.user.role,
-        };
-        return next();
+    // 2. Mandatory CSRF token validation for cookie-authenticated state-changing requests
+    if (isCookieAuthenticated(req)) {
+      const cookieCsrf = extractCsrfCookie(req);
+      const headerCsrf = extractCsrfHeader(req);
+      if (!cookieCsrf || !headerCsrf || !safeCompareTokens(cookieCsrf, headerCsrf)) {
+        return res.status(403).json({ error: 'CSRF token mismatch or missing. Please refresh and try again.' });
       }
-    } catch {
-      // Fallback to active admin below
     }
   }
 
-  // With CMS authentication removed, automatically authorize administrative requests
-  req.user = {
-    id: 1,
-    uid: 'admin-atelier',
-    email: authorizedEmail,
-    displayName: 'Studio Principal',
-    role: 'admin',
-  };
+  // 3. Extract and verify session token against PostgreSQL sessions table
+  const token = extractSessionToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required. Please log in at /admin.' });
+  }
 
-  next();
+  try {
+    const verified = await verifySessionToken(token);
+    if (!verified || !verified.user) {
+      return res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
+    }
+
+    // 4. Verify administrator role
+    if (verified.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access forbidden. Administrator privileges required.' });
+    }
+
+    req.user = {
+      id: verified.user.id,
+      uid: verified.user.uid,
+      email: verified.user.email,
+      displayName: verified.user.displayName,
+      role: verified.user.role,
+    };
+
+    return next();
+  } catch (error) {
+    console.error('requireAuth session verification error:', error);
+    return res.status(401).json({ error: 'Authentication verification failure.' });
+  }
 };
 
 /**
  * Safely verifies whether the incoming request is from an authenticated, authorized administrator.
- * Authentication has been removed: returns true.
+ * Performs real cryptographic session token verification against PostgreSQL database.
  */
-export async function isAuthenticatedAdmin(_req: Request): Promise<boolean> {
-  return true;
+export async function isAuthenticatedAdmin(req: Request): Promise<boolean> {
+  const token = extractSessionToken(req);
+  if (!token) return false;
+  try {
+    const verified = await verifySessionToken(token);
+    return !!(verified && verified.user && verified.user.role === 'admin');
+  } catch {
+    return false;
+  }
 }
+
+/**
+ * Enforces strict restricted admin boundary:
+ * If an endpoint manages website settings, inquiries, services, etc. (outside the allowed
+ * Feedback, Project Photos, Project Videos scope), access is denied unless explicitly
+ * authenticated as SUPER_ADMIN_EMAIL.
+ */
+export const requireSuperAdmin = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  return requireAuth(req, res, () => {
+    const user = req.user;
+    const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+    if (superAdminEmail && user && user.email.trim().toLowerCase() === superAdminEmail) {
+      return next();
+    }
+    return res.status(403).json({
+      error: 'Access restricted: Administrator capabilities in this deployment are strictly limited to Client Feedback moderation, Project Photos, and Project Videos.',
+    });
+  });
+};
+

@@ -14,12 +14,6 @@ export const CtaSection: React.FC = () => {
     scaleEnd: 1.0,
   });
 
-  // Foreground image frame counter-depth parallax
-  const [frameRef, { translateY: frameTranslateY }] = useParallax<HTMLDivElement>({
-    speed: -0.10,
-    clampPx: 35,
-  });
-
   const handleBeginProject = () => {
     setQueryInitialTab('enquiry');
     setIsQueryModalOpen(true);
@@ -54,15 +48,7 @@ export const CtaSection: React.FC = () => {
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[linear-gradient(to_right,#F2EEE7_1px,transparent_1px),linear-gradient(to_bottom,#F2EEE7_1px,transparent_1px)] bg-[size:4rem_4rem]" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-10 lg:px-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
-          {/* Left Column: Monumental Editorial Statement */}
-          <div className="lg:col-span-7 space-y-8">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-px bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.3em] uppercase text-[#B08D57] font-semibold font-mono">
-                COMMISSION INITIATION
-              </span>
-            </div>
+        <div className="max-w-3xl space-y-8">
 
             <h2 className="font-serif-title text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light text-[#F2EEE7] leading-[1.04] tracking-tight text-balance">
               READY TO TRANSFORM <br />
@@ -118,40 +104,7 @@ export const CtaSection: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* Right Column: Large Architectural Interior Photograph with Sculptural Frame and Parallax */}
-          <div
-            ref={frameRef}
-            className="lg:col-span-5 relative will-change-transform"
-            style={{
-              transform: `translate3d(0, ${frameTranslateY}px, 0)`,
-            }}
-          >
-            <div className="relative aspect-[4/5] w-full overflow-hidden shadow-2xl border border-[#3A3C3E] bg-[#2B2D2F] group">
-              <img
-                src="/images/projects/monolithic-travertine-pavilion.jpg"
-                alt="Conclave Interiors Architectural Residence"
-                loading="lazy"
-                className="w-full h-full object-cover object-center transition-transform duration-1000 ease-out group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#202124]/90 via-[#202124]/30 to-transparent" />
-
-              {/* Floating Architectural Annotation Card */}
-              <div className="absolute bottom-6 left-6 right-6 p-5 bg-[#2B2D2F]/90 backdrop-blur-md border border-[#3A3C3E] space-y-1">
-                <span className="text-[10px] tracking-[0.25em] uppercase text-[#B08D57] font-semibold block font-mono">
-                  ATELIER MONOGRAPH REF. 04
-                </span>
-                <h4 className="font-serif-title text-xl text-[#F2EEE7] font-light">
-                  Bespoke Architectural Residence
-                </h4>
-                <p className="text-[11px] text-[#8C8276] font-light">
-                  Natural limestone, fumed oak joinery, and shadowline reveals.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
-    </section>
-  );
+      </section>
+    );
 };

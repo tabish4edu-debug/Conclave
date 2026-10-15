@@ -140,7 +140,18 @@ export const INITIAL_PROJECTS: Project[] = [
         alt: 'Main living salon with custom bronze recessed lighting',
         caption: 'Central salon framing panoramic floor-to-ceiling apertures.',
       },
+      {
+        url: '/images/hero/contemporary-marble-kitchen.jpg',
+        alt: 'Bespoke travertine culinary island with warm fluted joinery',
+        caption: 'Culinary prep area crafted from honed Roman travertine.',
+      },
+      {
+        url: '/images/projects/limewash-plaster-suite.jpg',
+        alt: 'Quiet master sanctuary with natural linen drapery',
+        caption: 'Minimalist suite with limewash mineral plaster finish.',
+      },
     ],
+    videoUrl: '/videos/modern-apartment-walkthrough.mp4',
     isFeatured: true,
     status: 'published',
     sortOrder: 1,
@@ -168,7 +179,13 @@ export const INITIAL_PROJECTS: Project[] = [
         alt: 'Dining lounge with expansive garden views',
         caption: 'Central dining volume overlooking serene private green court.',
       },
+      {
+        url: '/images/projects/monolithic-travertine-pavilion.jpg',
+        alt: 'Double height reception hall with floor-to-ceiling glass',
+        caption: 'Double height reception gallery framing internal stone garden.',
+      },
     ],
+    videoUrl: '/videos/luxury-villa-walkthrough.mp4',
     isFeatured: true,
     status: 'published',
     sortOrder: 2,
@@ -587,10 +604,10 @@ export const INITIAL_FAQS: FaqItem[] = [
 export const INITIAL_ABOUT: AboutStudioData = {
   studioIntro:
     'CONCLAVE INTERIORS is an architectural interior practice dedicated to the quiet power of space. We sculpt environments that eschew transient trends in favor of enduring proportion, organic texture, and disciplined light.',
-  designerName: 'Principal Designer [Placeholder — Editable in CMS]',
+  designerName: 'Principal Designer & Architect',
   designerRole: 'Founder & Design Director',
   designerBio:
-    'Educated in architectural heritage and minimalist spatial theory, our principal leads a studio devoted to material authenticity. With a reverence for natural stone, smoked timber, and patinated metals, our work creates sanctuaries that feel grounded, tactile, and deeply restful. (Note: Client biography and credentials can be updated anytime in the Admin Panel).',
+    'Educated in architectural heritage and minimalist spatial theory, our principal leads a studio devoted to material authenticity. With a reverence for natural stone, smoked timber, and patinated metals, our work creates sanctuaries that feel grounded, tactile, and deeply restful.',
   designerPhoto:
     '/images/about/principal-designer.jpg',
   philosophyHeadline: 'THE ARCHITECTURE OF RESTFUL SILENCE.',

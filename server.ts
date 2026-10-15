@@ -11,6 +11,7 @@ import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import {
   requireAuth,
+  requireSuperAdmin,
   AuthRequest,
   isLocalhostRequest,
   isAuthenticatedAdmin,
@@ -20,6 +21,7 @@ import {
   extractCsrfCookie,
   extractCsrfHeader,
   safeCompareTokens,
+  isTrustedHost,
 } from './src/middleware/auth.ts';
 import { storageService } from './src/lib/storage.ts';
 import { sanitizeHtml, sanitizeText } from './src/lib/sanitize.ts';
@@ -75,7 +77,9 @@ import {
   deleteSession,
   deleteUserSessions,
   updateUserPassword,
+  cleanExpiredSessions,
 } from './src/db/service.ts';
+import { closePool } from './src/db/index.ts';
 
 // In-memory sliding window IP rate limiter for public submission endpoints
 interface RateLimitRecord {
@@ -209,29 +213,92 @@ async function startServer() {
     message: 'Too many submissions from this IP address. Please try again in 15 minutes.',
   });
 
+  const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15MB limit for high-res architectural photographs
+  const MAX_VIDEO_BYTES = 40 * 1024 * 1024; // 40MB limit for project walkthrough videos
+
   // Configure Memory Storage for persistent cloud database storage (Images & Videos)
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit for high-res images and videos
+    limits: { fileSize: MAX_VIDEO_BYTES },
     fileFilter: (_req, file, cb) => {
-      if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+      const mime = file.mimetype.toLowerCase();
+      // SVG files are active XML/script vectors and disallowed for project photos/videos
+      if (mime.includes('svg')) {
+        return cb(new Error('Vector XML/SVG files are not permitted for project media. Please upload photographic images (JPEG, PNG, WebP, AVIF) or video files (MP4, WebM, MOV, OGG).'));
+      }
+      if (mime.startsWith('image/') || mime.startsWith('video/')) {
         cb(null, true);
       } else {
-        cb(new Error('Only image formats (JPEG, PNG, WebP, AVIF, SVG) and video formats (MP4, WebM, MOV, OGG) are permitted'));
+        cb(new Error('Only standard photographic image formats (JPEG, PNG, WebP, AVIF) and video formats (MP4, WebM, MOV, OGG) are permitted.'));
       }
     },
   });
 
   const isProduction = process.env.NODE_ENV === 'production';
-  const sessionSecret = process.env.SESSION_SECRET;
+  const rawSessionSecret = process.env.SESSION_SECRET?.trim();
 
+  let sessionSecret: string;
   if (isProduction) {
-    if (!sessionSecret || sessionSecret === 'conclave_atelier_session_secret' || sessionSecret.length < 32) {
-      throw new Error(
-        'SECURITY FATAL: In production, SESSION_SECRET must be explicitly set with a unique, cryptographically strong secret of at least 32 characters.'
+    if (!rawSessionSecret || rawSessionSecret.length < 32) {
+      console.error(
+        '[FATAL CONFIGURATION ERROR] In production, SESSION_SECRET must be supplied as an environment variable with a minimum length of 32 characters.'
       );
+      process.exit(1);
     }
+    const devPlaceholderSecrets = [
+      'conclave_atelier_session_secret',
+      'conclave_atelier_dev_session_secret_32chars_long!',
+      'generate_a_random_32_character_hex_or_base64_secret_here',
+      'changeme123456789012345678901234',
+    ];
+    if (devPlaceholderSecrets.includes(rawSessionSecret)) {
+      console.error(
+        '[FATAL CONFIGURATION ERROR] In production, SESSION_SECRET cannot use a development placeholder value. Supply a unique, high-entropy secret.'
+      );
+      process.exit(1);
+    }
+    sessionSecret = rawSessionSecret;
+  } else {
+    // In development, allow convenient fallback if not supplied
+    sessionSecret = rawSessionSecret && rawSessionSecret.length >= 32
+      ? rawSessionSecret
+      : 'conclave_atelier_dev_session_secret_32chars_long!';
   }
+
+  // Global HTTP Security Headers Middleware
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+    // HSTS (HTTP Strict Transport Security): Only in production over HTTPS
+    if (isProduction && (req.secure || req.headers['x-forwarded-proto'] === 'https')) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+
+    // Content Security Policy tailored for high-end portfolio applet & AI Studio iframe embedding
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https://images.unsplash.com https://*.unsplash.com",
+      "media-src 'self' blob: data:",
+      "connect-src 'self' ws: wss: https:",
+      "frame-ancestors 'self' https://*.google.com https://*.run.app https://aistudio.google.com https://localhost.corp.google.com:26001",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; ');
+    res.setHeader('Content-Security-Policy', csp);
+
+    // Prevent caching on sensitive authentication and administration endpoints
+    if (req.path.startsWith('/api/auth') || req.path.startsWith('/api/admin')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+
+    next();
+  });
 
   app.use(cookieParser(sessionSecret || 'conclave_atelier_session_secret'));
   app.use(express.json({ limit: '2mb' }));
@@ -243,21 +310,32 @@ async function startServer() {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3001',
       'http://localhost:5173',
       'http://127.0.0.1:5173',
       'http://localhost:5174',
       'http://127.0.0.1:5174',
       process.env.APP_URL,
+      process.env.RENDER_EXTERNAL_URL,
+      process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : undefined,
     ].filter(Boolean) as string[];
 
     const isDevelopment = process.env.NODE_ENV !== 'production';
 
-    const isAllowed =
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      (isDevelopment && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')));
+    let isAllowed = !origin;
+    if (origin) {
+      if (allowedOrigins.includes(origin)) {
+        isAllowed = true;
+      } else if (isDevelopment && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
+        isAllowed = true;
+      } else {
+        try {
+          const originHost = new URL(origin).hostname;
+          isAllowed = isTrustedHost(originHost);
+        } catch {
+          isAllowed = false;
+        }
+      }
+    }
 
     if (origin && isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin);
@@ -278,7 +356,7 @@ async function startServer() {
   app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
-      service: 'CONCLAVE INTERIORS Atelier CMS API',
+      service: 'CONCLAVE INTERIORS Atelier Admin API',
       database: 'PostgreSQL',
       mediaStorage: 'Persistent Online Storage (Database Blobs / Abstracted)',
       timestamp: new Date().toISOString(),
@@ -293,34 +371,76 @@ async function startServer() {
     console.error('Initial DB seeding background error:', err);
   });
 
+  // Periodic background cleanup of expired PostgreSQL session tokens
+  setInterval(() => {
+    cleanExpiredSessions().catch(() => {});
+  }, 15 * 60 * 1000).unref();
+
   // -------------------------------------------------------------
   // PERSISTENT ONLINE MEDIA STREAMING & MANAGEMENT
   // -------------------------------------------------------------
   app.get('/api/media/:id', async (req, res) => {
     try {
-      const media = await storageService.getMedia(req.params.id);
+      const mediaId = req.params.id;
+      if (!mediaId || typeof mediaId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(mediaId)) {
+        return res.status(400).json({ error: 'Invalid media identifier.' });
+      }
+
+      const media = await storageService.getMedia(mediaId);
       if (!media) {
         return res.status(404).json({ error: 'Media not found' });
       }
 
       res.setHeader('Content-Type', media.mimeType);
       res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      const isSvg = media.mimeType.toLowerCase().includes('svg');
-      res.setHeader(
-        'Content-Disposition',
-        `${isSvg ? 'attachment' : 'inline'}; filename="${media.fileName}"`
-      );
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
       res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; media-src 'self'; style-src 'unsafe-inline'");
 
-      // Video range streaming support (seeking, scrub bar, chunk buffering)
+      const etag = `"${mediaId}-${media.buffer.length}"`;
+      res.setHeader('ETag', etag);
+
+      // Support HTTP 304 conditional requests when media has not changed
+      if (!req.headers.range && req.headers['if-none-match'] === etag) {
+        return res.status(304).end();
+      }
+
+      const safeFileName = media.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      res.setHeader('Content-Disposition', `inline; filename="${safeFileName}"`);
+
+      // Video range streaming support (seeking, scrub bar, chunk buffering - RFC 7233)
       const range = req.headers.range;
-      if (range && media.mimeType.startsWith('video/')) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : media.buffer.length - 1;
+      const ifRange = req.headers['if-range'];
+      const isRangeAllowed = !ifRange || ifRange === etag;
+
+      if (range && isRangeAllowed && range.startsWith('bytes=') && media.mimeType.startsWith('video/')) {
+        const rangeVal = range.replace('bytes=', '').trim();
+        const parts = rangeVal.split('-');
+        let start = parseInt(parts[0], 10);
+        let end = parts[1] ? parseInt(parts[1], 10) : media.buffer.length - 1;
+
+        // Handle suffix byte ranges e.g. bytes=-500 (last 500 bytes)
+        if (isNaN(start) && !isNaN(end)) {
+          start = Math.max(0, media.buffer.length - end);
+          end = media.buffer.length - 1;
+        } else if (isNaN(start)) {
+          start = 0;
+        }
+
+        if (isNaN(end) || end >= media.buffer.length) {
+          end = media.buffer.length - 1;
+        }
+
+        // RFC 7233 Section 4.4: Range Not Satisfiable
+        if (start >= media.buffer.length || start > end || start < 0) {
+          res.status(416);
+          res.setHeader('Content-Range', `bytes */${media.buffer.length}`);
+          return res.end();
+        }
+
         const chunkSize = end - start + 1;
-        const fileChunk = media.buffer.slice(start, end + 1);
+        // Zero-copy subarray view prevents unnecessary heap allocations during playback seeking
+        const fileChunk = media.buffer.subarray(start, end + 1);
 
         res.status(206);
         res.setHeader('Content-Range', `bytes ${start}-${end}/${media.buffer.length}`);
@@ -339,7 +459,85 @@ async function startServer() {
   // Fallback for static files on local filesystem (e.g. initial seed assets)
   app.use('/uploads', express.static(uploadsDir));
 
-  // Upload image or video to persistent online storage
+  // Strict Rate limiter for administrator authentication (10 attempts per 15 minutes per IP)
+  const loginRateLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    maxRequests: 10,
+    message: 'Too many authentication attempts. Please wait 15 minutes before retrying.',
+  });
+
+  // Server-side binary signature validation to prevent executable / malicious uploads
+  function validateFileBufferSignature(buffer: Buffer, mimetype: string): { isValid: boolean; detectedType?: string } {
+    if (!buffer || buffer.length < 8) return { isValid: false };
+
+    // Explicitly reject SVG active content (scripts, XML entities)
+    if (mimetype.includes('svg') || buffer.toString('utf8', 0, Math.min(buffer.length, 512)).toLowerCase().includes('<svg')) {
+      return { isValid: false, detectedType: 'unsupported/svg' };
+    }
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return { isValid: mimetype.startsWith('image/'), detectedType: 'image/jpeg' };
+    }
+
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    ) {
+      return { isValid: mimetype.startsWith('image/'), detectedType: 'image/png' };
+    }
+
+    // WebP: RIFF ... WEBP
+    if (buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+      return { isValid: mimetype.startsWith('image/'), detectedType: 'image/webp' };
+    }
+
+    // GIF: GIF8
+    if (buffer.toString('ascii', 0, 4).startsWith('GIF8')) {
+      return { isValid: mimetype.startsWith('image/'), detectedType: 'image/gif' };
+    }
+
+    // ISO Box (MP4, QuickTime MOV, AVIF)
+    if (buffer.length >= 12 && buffer.toString('ascii', 4, 8) === 'ftyp') {
+      const brand = buffer.toString('ascii', 8, 12).toLowerCase();
+      // AVIF image format
+      if (brand === 'avif' || brand === 'avis') {
+        return { isValid: mimetype.startsWith('image/'), detectedType: 'image/avif' };
+      }
+      // QuickTime MOV
+      if (brand === 'qt  ') {
+        return { isValid: mimetype.startsWith('video/'), detectedType: 'video/quicktime' };
+      }
+      // MP4 video
+      return { isValid: mimetype.startsWith('video/'), detectedType: 'video/mp4' };
+    }
+
+    // QuickTime MOV without ftyp (moov, wide, mdat, free)
+    if (buffer.length >= 8 && ['moov', 'wide', 'mdat', 'free'].includes(buffer.toString('ascii', 4, 8))) {
+      return { isValid: mimetype.startsWith('video/'), detectedType: 'video/quicktime' };
+    }
+
+    // WebM: 1A 45 DF A3
+    if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+      return { isValid: mimetype.startsWith('video/'), detectedType: 'video/webm' };
+    }
+
+    // OGG: OggS
+    if (buffer.toString('ascii', 0, 4) === 'OggS') {
+      return { isValid: mimetype.startsWith('video/'), detectedType: 'video/ogg' };
+    }
+
+    return { isValid: false };
+  }
+
+  // Upload image or video to persistent online storage (Authenticated Administrator Only)
   app.post('/api/upload', requireAuth, (req, res, next) => {
     upload.any()(req, res, (err) => {
       if (err) {
@@ -355,6 +553,28 @@ async function startServer() {
         return res.status(400).json({ error: 'No media file uploaded' });
       }
 
+      const isVideo = file.mimetype.startsWith('video/');
+      if (!isVideo && file.size > MAX_PHOTO_BYTES) {
+        return res.status(400).json({
+          error: `Photograph exceeds maximum permitted size of 15MB (received ${(file.size / (1024 * 1024)).toFixed(1)}MB).`,
+        });
+      }
+      if (isVideo && file.size > MAX_VIDEO_BYTES) {
+        return res.status(400).json({
+          error: `Video exceeds maximum permitted size of 40MB (received ${(file.size / (1024 * 1024)).toFixed(1)}MB).`,
+        });
+      }
+
+      // Strict server-side binary inspection (do not trust browser MIME type or file extension alone)
+      const inspection = validateFileBufferSignature(file.buffer, file.mimetype);
+      if (!inspection.isValid) {
+        return res.status(400).json({
+          error: inspection.detectedType === 'unsupported/svg'
+            ? 'Vector XML/SVG files are not permitted. Please upload photographic images (JPEG, PNG, WebP, AVIF) or video files (MP4, WebM, MOV, OGG).'
+            : 'Uploaded file binary content does not match allowed photograph or video signatures.',
+        });
+      }
+
       const altText = req.body.altText ? sanitizeText(req.body.altText) : undefined;
 
       const result = await storageService.upload({
@@ -365,15 +585,13 @@ async function startServer() {
         altText,
       });
 
-      // Also mirror to local disk if running locally for instant preview compatibility
+      // Mirror to local disk if running in development for instant local preview fallback
       try {
         const localPath = path.join(uploadsDir, result.fileName);
         fs.writeFileSync(localPath, file.buffer);
       } catch (err) {
-        // Disk write failure on read-only environments is expected and benign
+        // Disk write failure on read-only cloud environments is expected and benign
       }
-
-      const isVideo = file.mimetype.startsWith('video/');
 
       res.status(201).json({
         success: true,
@@ -390,7 +608,7 @@ async function startServer() {
     }
   });
 
-  // List all media files in the library
+  // List all media files in the library (Authenticated Admin Only)
   app.get('/api/media', requireAuth, async (_req: AuthRequest, res) => {
     try {
       const list = await storageService.listMedia();
@@ -400,95 +618,391 @@ async function startServer() {
     }
   });
 
-  // Delete media from library
+  // Delete media from library (Authenticated Admin Only, with reference integrity protection)
   app.delete('/api/media/:id', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const success = await storageService.deleteMedia(req.params.id);
-      res.json({ success, deletedId: req.params.id });
+      const mediaId = req.params.id;
+      if (!mediaId || typeof mediaId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(mediaId)) {
+        return res.status(400).json({ error: 'Invalid media identifier.' });
+      }
+
+      // Check whether this media is in active use across projects to prevent broken images/videos
+      const mediaUrl = `/api/media/${mediaId}`;
+      const allProjects = await getAllProjects(false).catch(() => []);
+      const inUseProject = allProjects.find((p) => {
+        if (p.coverImage === mediaUrl || p.videoUrl === mediaUrl) return true;
+        return Array.isArray(p.galleryImages) && p.galleryImages.some((img) => img.url === mediaUrl);
+      });
+
+      if (inUseProject) {
+        return res.status(409).json({
+          error: `Cannot delete media: file is currently in active use by project "${inUseProject.title}". Please detach it from the project before deleting.`,
+        });
+      }
+
+      const success = await storageService.deleteMedia(mediaId);
+      if (!success) {
+        return res.status(404).json({ error: 'Media record not found.' });
+      }
+      res.json({ success: true, deletedId: mediaId });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to delete media' });
+      res.status(500).json({ error: 'Failed to delete media file' });
     }
   });
 
   // -------------------------------------------------------------
   // POSTGRESQL ADMIN SESSION AUTHENTICATION
   // -------------------------------------------------------------
+  const isHttps = isProduction || Boolean(process.env.APP_URL?.startsWith('https'));
   const sessionCookieOptions: express.CookieOptions = {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
+    signed: true,
   };
   const csrfCookieOptions: express.CookieOptions = {
     httpOnly: false,
-    secure: isProduction,
-    sameSite: 'lax',
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   };
 
-  // Administrator Login Endpoint (CMS Authentication Removed: Auto-authorizes Admin)
-  app.post('/api/auth/login', async (req, res) => {
+  // Administrator Login Endpoint (Protected with Rate Limiter, Brute-Force Tracker & bcrypt Verification)
+  app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
     try {
-      const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
-      const csrfToken = req.cookies?.conclave_csrf || crypto.randomBytes(16).toString('hex');
+      if (!isTrustedOrigin(req)) {
+        return res.status(403).json({ error: 'Untrusted request origin.' });
+      }
+
+      const clientIp =
+        (typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'].split(',')[0].trim() : undefined) ||
+        req.ip ||
+        req.socket.remoteAddress ||
+        'unknown-client';
+
+      const email = req.body.email ? String(req.body.email).trim().toLowerCase() : '';
+      const password = req.body.password ? String(req.body.password) : '';
+
+      // Check targeted IP and email brute-force protection
+      const bruteCheck = checkLoginBruteForce(clientIp, email);
+      if (bruteCheck.blocked) {
+        res.setHeader('Retry-After', String(bruteCheck.retryAfterSeconds || 900));
+        return res.status(429).json({
+          error: 'Too many failed login attempts. Authentication temporarily suspended for 15 minutes.',
+          retryAfterSeconds: bruteCheck.retryAfterSeconds,
+        });
+      }
+
+      if (!email || !password) {
+        recordFailedLogin(clientIp, email || 'empty');
+        return res.status(400).json({ error: 'Administrator email and password are required.' });
+      }
+
+      const user = await findUserByEmail(email);
+      if (!user || user.role !== 'admin' || !user.passwordHash) {
+        recordFailedLogin(clientIp, email);
+        return res.status(401).json({ error: 'Invalid administrator email or password.' });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.passwordHash);
+      if (!isMatch) {
+        recordFailedLogin(clientIp, email);
+        return res.status(401).json({ error: 'Invalid administrator email or password.' });
+      }
+
+      // Reset brute force counter on successful authentication
+      resetFailedLogin(clientIp, email);
+
+      // Invalidate existing session for this client to prevent session fixation
+      const existingToken = extractSessionToken(req);
+      if (existingToken) {
+        await deleteSession(existingToken).catch(() => {});
+      }
+
+      // Issue cryptographically random session token and insert into PostgreSQL sessions table
+      const { rawToken } = await createSession(user.id, 7);
+      const csrfToken = crypto.randomBytes(32).toString('hex');
+
+      res.cookie('conclave_session', rawToken, sessionCookieOptions);
       res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
 
       return res.json({
+        success: true,
         authenticated: true,
         user: {
-          id: 1,
-          uid: 'admin-atelier',
-          email: authorizedEmail,
-          displayName: 'Studio Principal',
-          role: 'admin',
+          id: user.id,
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || 'Studio Principal',
+          role: user.role,
         },
         csrfToken,
       });
     } catch (error: any) {
       console.error('Login error:', error);
-      return res.status(500).json({ error: 'Failed to process login.' });
+      return res.status(500).json({ error: 'Failed to process administrator login.' });
     }
   });
 
-  // Administrator Logout Endpoint
-  app.post('/api/auth/logout', async (_req, res) => {
-    res.clearCookie('conclave_session', { path: '/' });
-    res.clearCookie('conclave_csrf', { path: '/' });
-    return res.json({ success: true, message: 'Logged out successfully.' });
+  // Administrator Logout Endpoint (Protected against Cross-Site Forgery, Invalidates PostgreSQL Session)
+  app.post('/api/auth/logout', async (req, res) => {
+    try {
+      if (isCookieAuthenticated(req)) {
+        if (!isTrustedOrigin(req)) {
+          return res.status(403).json({ error: 'Untrusted logout origin.' });
+        }
+        const cookieCsrf = extractCsrfCookie(req);
+        const headerCsrf = extractCsrfHeader(req);
+        if (cookieCsrf && headerCsrf && !safeCompareTokens(cookieCsrf, headerCsrf)) {
+          return res.status(403).json({ error: 'CSRF token mismatch on logout.' });
+        }
+      }
+
+      const token = extractSessionToken(req);
+      if (token) {
+        await deleteSession(token).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      res.clearCookie('conclave_session', { path: '/' });
+      res.clearCookie('conclave_csrf', { path: '/' });
+      return res.json({ success: true, message: 'Logged out successfully.' });
+    }
   });
 
-  // Current Session Endpoint (Always provides active Studio Administrator session)
+  // Current Session Endpoint (Strictly Validates Session against PostgreSQL sessions table)
   app.get('/api/auth/session', async (req, res) => {
     try {
-      const authorizedEmail = (process.env.ADMIN_EMAIL || 'conclaveinteriorexterior@gmail.com').trim().toLowerCase();
-      const csrfToken = req.cookies?.conclave_csrf || crypto.randomBytes(16).toString('hex');
-      res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
+      const token = extractSessionToken(req);
+      if (!token) {
+        return res.json({ authenticated: false, user: null });
+      }
+
+      const verified = await verifySessionToken(token);
+      if (!verified || !verified.user || verified.user.role !== 'admin') {
+        res.clearCookie('conclave_session', { path: '/' });
+        return res.json({ authenticated: false, user: null });
+      }
+
+      let csrfToken = extractCsrfCookie(req);
+      if (!csrfToken) {
+        csrfToken = crypto.randomBytes(32).toString('hex');
+        res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
+      }
 
       return res.json({
         authenticated: true,
         user: {
-          id: 1,
-          uid: 'admin-atelier',
-          email: authorizedEmail,
-          displayName: 'Studio Principal',
-          role: 'admin',
+          id: verified.user.id,
+          uid: verified.user.uid,
+          email: verified.user.email,
+          displayName: verified.user.displayName || 'Studio Principal',
+          role: verified.user.role,
         },
         csrfToken,
       });
     } catch (error: any) {
       console.error('Session retrieval error:', error);
-      return res.json({
-        authenticated: true,
-        user: {
-          id: 1,
-          uid: 'admin-atelier',
-          email: 'conclaveinteriorexterior@gmail.com',
-          displayName: 'Studio Principal',
-          role: 'admin',
-        },
-      });
+      return res.json({ authenticated: false, user: null });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // RESTRICTED ADMIN PANEL API: PHOTOS & VIDEOS SPECIFIC MANAGEMENT
+  // -------------------------------------------------------------
+
+  // 1. Add photograph to a project (as gallery image or cover image)
+  app.post('/api/admin/projects/:id/photos', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid project identifier.' });
+      }
+
+      const { url, alt, caption, setAsCover } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'Photograph URL is required.' });
+      }
+
+      const proj = await getProjectById(id, true);
+      if (!proj) {
+        return res.status(404).json({ error: 'Project not found.' });
+      }
+
+      const sanitizedUrl = url.trim();
+      const sanitizedAlt = alt ? sanitizeText(alt) : proj.title;
+      const sanitizedCaption = caption ? sanitizeText(caption) : undefined;
+
+      const gallery = Array.isArray(proj.galleryImages) ? [...proj.galleryImages] : [];
+      if (!gallery.some((img) => img.url === sanitizedUrl)) {
+        gallery.push({ url: sanitizedUrl, alt: sanitizedAlt, caption: sanitizedCaption });
+      }
+
+      const updates: any = {
+        galleryImages: gallery,
+      };
+
+      if (setAsCover) {
+        updates.coverImage = sanitizedUrl;
+      }
+
+      const updated = await updateProject(id, updates);
+      return res.json({ success: true, project: updated });
+    } catch (error: any) {
+      console.error('Error adding photo to project:', error);
+      return res.status(500).json({ error: 'Failed to add photo to project.' });
+    }
+  });
+
+  // 2. Set designated cover photograph for a project
+  app.put('/api/admin/projects/:id/cover', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid project identifier.' });
+      }
+
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'Photograph URL is required.' });
+      }
+
+      const proj = await getProjectById(id, true);
+      if (!proj) {
+        return res.status(404).json({ error: 'Project not found.' });
+      }
+
+      const updated = await updateProject(id, { coverImage: url.trim() });
+      return res.json({ success: true, project: updated });
+    } catch (error: any) {
+      console.error('Error setting cover photo:', error);
+      return res.status(500).json({ error: 'Failed to set cover photo.' });
+    }
+  });
+
+  // 3. Delete photograph from a project
+  app.delete('/api/admin/projects/:id/photos', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid project identifier.' });
+      }
+
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'Photograph URL is required.' });
+      }
+
+      const proj = await getProjectById(id, true);
+      if (!proj) {
+        return res.status(404).json({ error: 'Project not found.' });
+      }
+
+      const targetUrl = url.trim();
+      const currentGallery = Array.isArray(proj.galleryImages) ? proj.galleryImages : [];
+      const updatedGallery = currentGallery.filter((img) => img.url !== targetUrl);
+
+      const updates: any = {
+        galleryImages: updatedGallery,
+      };
+
+      if (proj.coverImage === targetUrl) {
+        updates.coverImage = updatedGallery.length > 0
+          ? updatedGallery[0].url
+          : '/images/projects/monolithic-travertine-pavilion.jpg';
+      }
+
+      const updated = await updateProject(id, updates);
+
+      // Safe media deletion: check if referenced elsewhere before removing blob from storage
+      if (targetUrl.startsWith('/api/media/')) {
+        const mediaId = targetUrl.replace('/api/media/', '');
+        const allProjects = await getAllProjects(true).catch(() => []);
+        const isReferencedElsewhere = allProjects.some((p) => {
+          if (p.id === id) return false;
+          if (p.coverImage === targetUrl || p.videoUrl === targetUrl) return true;
+          return Array.isArray(p.galleryImages) && p.galleryImages.some((img) => img.url === targetUrl);
+        });
+        if (!isReferencedElsewhere) {
+          try {
+            await storageService.deleteMedia(mediaId);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      return res.json({ success: true, project: updated });
+    } catch (error: any) {
+      console.error('Error deleting photo from project:', error);
+      return res.status(500).json({ error: 'Failed to delete photo.' });
+    }
+  });
+
+  // 4. Attach/replace video on a project
+  app.post('/api/admin/projects/:id/video', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid project identifier.' });
+      }
+
+      const { videoUrl } = req.body;
+      if (!videoUrl || typeof videoUrl !== 'string') {
+        return res.status(400).json({ error: 'Video URL is required.' });
+      }
+
+      const proj = await getProjectById(id, true);
+      if (!proj) {
+        return res.status(404).json({ error: 'Project not found.' });
+      }
+
+      const updated = await updateProject(id, { videoUrl: videoUrl.trim() });
+      return res.json({ success: true, project: updated });
+    } catch (error: any) {
+      console.error('Error attaching video to project:', error);
+      return res.status(500).json({ error: 'Failed to attach video.' });
+    }
+  });
+
+  // 5. Delete video from a project
+  app.delete('/api/admin/projects/:id/video', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid project identifier.' });
+      }
+
+      const proj = await getProjectById(id, true);
+      if (!proj) {
+        return res.status(404).json({ error: 'Project not found.' });
+      }
+
+      const oldVideoUrl = proj.videoUrl;
+      const updated = await updateProject(id, { videoUrl: null });
+
+      // Clean up storage if not referenced elsewhere
+      if (oldVideoUrl && oldVideoUrl.startsWith('/api/media/')) {
+        const mediaId = oldVideoUrl.replace('/api/media/', '');
+        const allProjects = await getAllProjects(true).catch(() => []);
+        const isReferenced = allProjects.some((p) => p.id !== id && p.videoUrl === oldVideoUrl);
+        if (!isReferenced) {
+          try {
+            await storageService.deleteMedia(mediaId);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      return res.json({ success: true, project: updated });
+    } catch (error: any) {
+      console.error('Error deleting video from project:', error);
+      return res.status(500).json({ error: 'Failed to delete video.' });
     }
   });
 
@@ -511,8 +1025,8 @@ async function startServer() {
       if (newPassword !== confirmPassword) {
         return res.status(400).json({ error: 'New password and confirmation do not match.' });
       }
-      if (typeof newPassword !== 'string' || newPassword.length < 8) {
-        return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+      if (typeof newPassword !== 'string' || newPassword.length < 12) {
+        return res.status(400).json({ error: 'New password must be at least 12 characters long.' });
       }
 
       const user = await findUserById(req.user!.id);
@@ -531,7 +1045,7 @@ async function startServer() {
       // Invalidate existing sessions and generate fresh session
       await deleteUserSessions(user.id);
       const { rawToken } = await createSession(user.id, 7);
-      const csrfToken = crypto.randomBytes(16).toString('hex');
+      const csrfToken = crypto.randomBytes(32).toString('hex');
 
       res.cookie('conclave_session', rawToken, sessionCookieOptions);
       res.cookie('conclave_csrf', csrfToken, csrfCookieOptions);
@@ -550,7 +1064,7 @@ async function startServer() {
   // -------------------------------------------------------------
   // PUBLICATION WORKFLOW & AUDIT HISTORY
   // -------------------------------------------------------------
-  app.get('/api/admin/publication-status', requireAuth, async (_req: AuthRequest, res) => {
+  app.get('/api/admin/publication-status', requireSuperAdmin, async (_req: AuthRequest, res) => {
     try {
       const status = await getUnpublishedChangesSummary();
       res.json(status);
@@ -559,7 +1073,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/admin/publish-batch', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/admin/publish-batch', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const user = req.user!;
       const note = req.body.notes ? sanitizeText(req.body.notes) : undefined;
@@ -575,7 +1089,7 @@ async function startServer() {
     }
   });
 
-  app.get('/api/admin/publication-history', requireAuth, async (_req: AuthRequest, res) => {
+  app.get('/api/admin/publication-history', requireSuperAdmin, async (_req: AuthRequest, res) => {
     try {
       const history = await getPublicationHistory();
       res.json(history);
@@ -595,7 +1109,8 @@ async function startServer() {
       const data = await getAllProjects(!includeDrafts);
       res.json(data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to fetch projects' });
+      console.error('Error fetching projects:', error);
+      res.status(500).json({ error: 'Failed to fetch projects' });
     }
   });
 
@@ -607,11 +1122,12 @@ async function startServer() {
       if (!data) return res.status(404).json({ error: 'Project not found' });
       res.json(data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to fetch project' });
+      console.error(`Error fetching project ${req.params.id}:`, error);
+      res.status(500).json({ error: 'Failed to fetch project' });
     }
   });
 
-  app.post('/api/projects', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/projects', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const generatedId = req.body.id || req.body.slug || `proj-${Date.now()}`;
       const payload: any = {
@@ -627,6 +1143,7 @@ async function startServer() {
         title: sanitizeText(req.body.title || 'Untitled Monograph'),
         coverImage: req.body.coverImage || req.body.cover_image || '/images/projects/monolithic-travertine-pavilion.jpg',
         galleryImages: req.body.galleryImages || req.body.gallery_images || [],
+        videoUrl: req.body.videoUrl || req.body.video_url || null,
         materialsPalette: req.body.materialsPalette || req.body.materials_palette || [],
         isFeatured: req.body.isFeatured ?? req.body.is_featured ?? false,
         status: req.body.status || req.body.status || 'draft',
@@ -642,7 +1159,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/projects/:id/duplicate', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/projects/:id/duplicate', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const duplicated = await duplicateProject(req.params.id);
       res.status(201).json(duplicated);
@@ -651,7 +1168,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/projects/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/projects/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.description) payload.description = sanitizeHtml(payload.description);
@@ -660,6 +1177,9 @@ async function startServer() {
       if (payload.location) payload.location = sanitizeText(payload.location);
       if (payload.seoTitle) payload.seoTitle = sanitizeText(payload.seoTitle);
       if (payload.seoDescription) payload.seoDescription = sanitizeText(payload.seoDescription);
+      if (payload.videoUrl !== undefined || payload.video_url !== undefined) {
+        payload.videoUrl = req.body.videoUrl || req.body.video_url || null;
+      }
 
       const updated = await updateProject(req.params.id, payload);
       res.json(updated);
@@ -668,7 +1188,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/projects/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/projects/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       await deleteProject(req.params.id);
       res.json({ success: true, deletedId: req.params.id });
@@ -677,7 +1197,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/projects/:id/publish', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/projects/:id/publish', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const isPublished = req.body.isPublished !== false;
       const updated = await publishProject(req.params.id, isPublished);
@@ -701,7 +1221,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/hero-slides', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/hero-slides', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = {
         ...req.body,
@@ -715,7 +1235,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/hero-slides/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/hero-slides/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.headline) payload.headline = sanitizeText(payload.headline);
@@ -728,7 +1248,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/hero-slides/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/hero-slides/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       await deleteHeroSlide(req.params.id);
       res.json({ success: true, deletedId: req.params.id });
@@ -737,7 +1257,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/hero-slides/:id/publish', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/hero-slides/:id/publish', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const isPublished = req.body.isPublished !== false;
       const updated = await publishHeroSlide(req.params.id, isPublished);
@@ -761,7 +1281,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/strip-items', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/strip-items', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = {
         ...req.body,
@@ -775,7 +1295,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/strip-items/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/strip-items/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.title) payload.title = sanitizeText(payload.title);
@@ -788,7 +1308,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/strip-items/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/strip-items/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       await deleteStripItem(req.params.id);
       res.json({ success: true, deletedId: req.params.id });
@@ -811,7 +1331,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/services', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/services', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = {
         ...req.body,
@@ -826,7 +1346,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/services/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/services/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.title) payload.title = sanitizeText(payload.title);
@@ -840,7 +1360,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/services/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/services/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       await deleteService(req.params.id);
       res.json({ success: true, deletedId: req.params.id });
@@ -849,7 +1369,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/services/:id/publish', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/services/:id/publish', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const isPublished = req.body.isPublished !== false;
       const updated = await publishService(req.params.id, isPublished);
@@ -880,11 +1400,16 @@ async function startServer() {
       if (!clientName || !feedbackMessage) {
         return res.status(400).json({ error: 'Client name and feedback message are required' });
       }
+
+      // Strictly clamp rating between 1 and 5
+      const rawRating = Number(rating);
+      const sanitizedRating = Math.max(1, Math.min(5, Math.round(isNaN(rawRating) ? 5 : rawRating)));
+
       const created = await submitTestimonial({
         clientName: sanitizeText(clientName),
         clientRole: clientRole ? sanitizeText(clientRole) : undefined,
         projectReference: projectReference ? sanitizeText(projectReference) : undefined,
-        rating: Number(rating) || 5,
+        rating: sanitizedRating,
         feedbackMessage: sanitizeText(feedbackMessage),
       });
       res.status(201).json({
@@ -893,37 +1418,51 @@ async function startServer() {
         item: created,
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to submit feedback' });
+      res.status(500).json({ error: 'Failed to submit feedback' });
     }
   });
 
-  // Admin moderation action: APPROVE or REJECT
+  // Admin moderation action: APPROVE or REJECT (Protected with ID validation)
   app.put('/api/testimonials/:id/moderate', requireAuth, async (req: AuthRequest, res) => {
     try {
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid feedback identifier.' });
+      }
+
       const { status, isFeatured } = req.body;
       if (!['APPROVED', 'REJECTED', 'PENDING'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid moderation status' });
+        return res.status(400).json({ error: 'Invalid moderation status. Must be APPROVED, REJECTED, or PENDING.' });
       }
-      const updated = await moderateTestimonial(req.params.id, status, isFeatured);
+
+      const updated = await moderateTestimonial(id, status, isFeatured);
+      if (!updated) {
+        return res.status(404).json({ error: 'Feedback record not found.' });
+      }
+
       res.json(updated);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to moderate testimonial' });
+      res.status(500).json({ error: 'Failed to moderate testimonial' });
     }
   });
 
   app.delete('/api/testimonials/:id', requireAuth, async (req: AuthRequest, res) => {
     try {
-      await deleteTestimonial(req.params.id);
-      res.json({ success: true, deletedId: req.params.id });
+      const { id } = req.params;
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
+        return res.status(400).json({ error: 'Invalid feedback identifier.' });
+      }
+      await deleteTestimonial(id);
+      res.json({ success: true, deletedId: id });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to delete testimonial' });
+      res.status(500).json({ error: 'Failed to delete testimonial' });
     }
   });
 
   // -------------------------------------------------------------
-  // CLIENT INQUIRIES & COMMISSIONS (STRICTLY PRIVATE)
+  // CLIENT INQUIRIES & COMMISSIONS (STRICTLY PRIVATE - SUPER ADMIN ONLY)
   // -------------------------------------------------------------
-  app.get('/api/enquiries', requireAuth, async (_req: AuthRequest, res) => {
+  app.get('/api/enquiries', requireSuperAdmin, async (_req: AuthRequest, res) => {
     try {
       const data = await getAllEnquiries();
       res.json(data);
@@ -1197,12 +1736,13 @@ async function startServer() {
         id: created.id,
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Failed to submit enquiry' });
+      console.error('Error submitting enquiry:', error);
+      res.status(500).json({ error: 'Failed to submit enquiry. Please try again or contact the studio directly.' });
     }
   });
 
   // Admin status update (e.g. NEW -> READ -> CONTACTED -> CLOSED)
-  app.put('/api/enquiries/:id/status', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/enquiries/:id/status', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const { status, internalNotes } = req.body;
       if (!['NEW', 'READ', 'CONTACTED', 'CLOSED'].includes(status)) {
@@ -1216,7 +1756,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/enquiries/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/enquiries/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       await deleteEnquiry(req.params.id);
       res.json({ success: true, deletedId: req.params.id });
@@ -1239,7 +1779,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/faqs', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/faqs', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = {
         ...req.body,
@@ -1254,7 +1794,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/faqs/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/faqs/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.question) payload.question = sanitizeText(payload.question);
@@ -1268,7 +1808,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/faqs/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/faqs/:id', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       await deleteFaq(req.params.id);
       res.json({ success: true, deletedId: req.params.id });
@@ -1277,7 +1817,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/faqs/:id/publish', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/faqs/:id/publish', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const isPublished = req.body.isPublished !== false;
       const updated = await publishFaq(req.params.id, isPublished);
@@ -1299,7 +1839,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/settings', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/settings', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.studioName) payload.studioName = sanitizeText(payload.studioName);
@@ -1326,7 +1866,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/about', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/about', requireSuperAdmin, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
       if (payload.studioIntro) payload.studioIntro = sanitizeHtml(payload.studioIntro);
@@ -1351,16 +1891,71 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // Robust dist path resolution supporting GoDaddy cPanel, subdirectories, and standard deployments
+    const candidateDist = path.join(process.cwd(), 'dist');
+    const distPath = fs.existsSync(path.join(candidateDist, 'index.html'))
+      ? candidateDist
+      : fs.existsSync(path.join(process.cwd(), 'index.html'))
+      ? process.cwd()
+      : fs.existsSync(path.join(__dirname, 'index.html'))
+      ? __dirname
+      : candidateDist;
+
+    app.use(
+      express.static(distPath, {
+        maxAge: '1d',
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          } else if (filePath.match(/\.(js|css|webp|png|jpg|jpeg|svg|woff2?|ttf)$/i)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
+
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`CONCLAVE INTERIORS Atelier Server running on http://0.0.0.0:${PORT}`);
-  });
+  // Support numeric ports (e.g. 3000, Render, VPS) and Unix domain sockets (e.g. GoDaddy cPanel Phusion Passenger)
+  const rawPort = process.env.PORT;
+  const isNamedPipeOrSocket = rawPort && isNaN(Number(rawPort));
+
+  let server: any;
+  if (isNamedPipeOrSocket) {
+    server = app.listen(rawPort, () => {
+      console.log(`CONCLAVE INTERIORS Atelier Server running on socket ${rawPort}`);
+    });
+  } else {
+    const portNumber = Number(rawPort) || 3000;
+    server = app.listen(portNumber, '0.0.0.0', () => {
+      console.log(`CONCLAVE INTERIORS Atelier Server running on http://0.0.0.0:${portNumber}`);
+    });
+  }
+
+  // Graceful shutdown handling for container and process managers (GoDaddy cPanel, PM2, Docker, Cloud Run)
+  const shutdown = (signal: string) => {
+    console.log(`[SHUTDOWN] Received ${signal}. Closing HTTP listener gracefully...`);
+    server.close(async () => {
+      console.log('[SHUTDOWN] HTTP listener closed cleanly.');
+      try {
+        await closePool();
+        console.log('[SHUTDOWN] PostgreSQL pool drained and closed.');
+      } catch (err) {
+        console.error('[SHUTDOWN] Error closing database pool:', err);
+      }
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('[SHUTDOWN] Force closing after 10s timeout.');
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer();

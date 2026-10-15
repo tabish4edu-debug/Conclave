@@ -20,13 +20,6 @@ export const FaqSection: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
           {/* Left Column: Title and Consultation Note */}
           <div className="lg:col-span-4 space-y-6">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-px bg-[#B08D57]" />
-              <span className="text-[11px] tracking-[0.3em] uppercase text-[#B08D57] font-semibold font-mono">
-                CURIOUS INQUIRIES
-              </span>
-            </div>
-
             <h2 className="font-serif-title text-4xl sm:text-5xl font-light text-[#202124] leading-[1.08] tracking-tight text-balance">
               FREQUENTLY ASKED QUESTIONS
             </h2>

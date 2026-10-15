@@ -12,7 +12,7 @@ function walk(dir, files = []) {
   return files;
 }
 
-const allFiles = [...walk('src'), ...walk('CMS'), 'server.ts', 'index.html'];
+const allFiles = [...walk('src'), 'server.ts', 'index.html'];
 const urlRegex = /https?:\/\/[^\s"'`\\><)]+/g;
 const imageUrls = new Map();
 

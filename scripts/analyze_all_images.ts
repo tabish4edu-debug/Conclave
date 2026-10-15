@@ -16,7 +16,7 @@ function walk(dir: string, files: string[] = []): string[] {
 }
 
 async function run() {
-  const allFiles = [...walk('src'), ...walk('CMS'), 'server.ts', 'index.html'];
+  const allFiles = [...walk('src'), 'server.ts', 'index.html'];
   const urlRegex = /https?:\/\/[^\s"'`\\><)]+/g;
   const urlMap = new Map<string, Set<string>>();
 

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useStudio } from '../../context/StudioContext';
 import { ContinuousStripItem } from '../../types';
 import { Eye, X } from 'lucide-react';
-import { PlaceholderBadge } from '../../components/common/PlaceholderBadge';
 import { useParallax } from '../../hooks/useParallax';
 
 export const ContinuousImageStrip: React.FC = () => {
@@ -40,20 +39,11 @@ export const ContinuousImageStrip: React.FC = () => {
       aria-label="Continuous Architectural Gallery Strip"
       className="relative py-16 bg-[#F2EEE7] text-[#202124] overflow-hidden border-y border-[#D6CBBE]"
     >
-      {/* Header Eyebrow */}
-      <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-12 mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="w-2.5 h-2.5 bg-[#B08D57]" />
-          <span className="text-[11px] tracking-[0.28em] uppercase text-[#202124] font-semibold font-mono">
-            CONTINUOUS ARCHITECTURAL REPERTOIRE
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-[11px] tracking-widest text-[#8C8276] uppercase font-mono hidden sm:inline">
-            Hover to Pause · Click to Inspect Monograph
-          </span>
-          <PlaceholderBadge variant="compact" />
-        </div>
+      {/* Header Info */}
+      <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-12 mb-6 flex items-center justify-end">
+        <span className="text-[11px] tracking-widest text-[#8C8276] uppercase font-mono">
+          Hover to Pause · Click to Inspect Monograph
+        </span>
       </div>
 
       {/* Marquee Track with Subtle Depth Translation (Smooth right-to-left infinite motion) */}
